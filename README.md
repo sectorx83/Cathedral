@@ -51,6 +51,7 @@ The CLI provides:
 ```sh
 cathedral run hello-lab -- /usr/bin/python3 app.py
 cathedral monitor hello-lab
+cathedral monitor hello-lab --watch --interval-seconds 2
 cathedral processes hello-lab
 cathedral logs hello-lab
 cathedral stop hello-lab <run-id>
