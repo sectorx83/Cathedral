@@ -4,13 +4,13 @@
 
 ### The Open Computing Laboratory
 
-Cathedral is an open-source developer platform for creating isolated software experiments, observing how they behave, diagnosing failures, and reproducing environments on other compatible machines.
+Cathedral is an open-source developer platform being built to manage isolated software experiments, observe how they behave, diagnose failures, and reproduce environments on other compatible machines.
 
 Its goal is simple: make **"it works on my machine"** a problem that can be investigated and reproduced instead of a mystery.
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phase 1 foundation is implemented and undergoing cross-platform CI verification. Runtime isolation, live observability, snapshots, reproduction, and desktop Studio are not implemented yet.
+> **Project status:** Phase 1 Foundation & Core Engine is complete and verified on Linux, Windows, and macOS. Runtime isolation, live observability, snapshots, reproduction, and desktop Studio remain future phases.
 
 ## What Cathedral is
 
@@ -27,7 +27,7 @@ The intended workflow is:
 
 ## Current Phase 1 implementation
 
-The initial Rust workspace currently provides:
+The completed Phase 1 Rust foundation provides:
 
 - A CLI named `cathedral`.
 - SQLite-backed local experiment metadata.
@@ -42,7 +42,7 @@ The initial Rust workspace currently provides:
 - Host data-directory selection with a `CATHEDRAL_HOME` override.
 - A cross-platform CI matrix for Linux, Windows, and macOS.
 
-Phase 1 now includes transactional registry initialization with legacy schema migration, persisted lifecycle state, resumable deletion, SQLite integrity checks, atomic manifest persistence, validated dependency metadata, managed-path consistency checks in `cathedral doctor`, structured tracing, and expanded lifecycle failure tests. Runtime execution and isolation remain Phase 2 work.
+Phase 1 deliberately stops at experiment management and platform contracts. It does not execute workloads or claim to isolate untrusted code.
 
 ## Build from source
 
