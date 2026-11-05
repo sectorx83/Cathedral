@@ -16,6 +16,8 @@ pub struct Manifest {
     pub experiment: ExperimentSection,
     #[serde(default)]
     pub environment: EnvironmentSection,
+    #[serde(default)]
+    pub dependencies: DependencySection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,6 +37,15 @@ pub struct EnvironmentSection {
     pub variables: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct DependencySection {
+    /// Declared package names and version requirements. Phase 1 records these
+    /// values but deliberately does not resolve or install packages.
+    #[serde(default)]
+    pub packages: BTreeMap<String, String>,
+}
+
 impl Manifest {
     pub fn minimal(name: impl Into<String>) -> Self {
         Self {
@@ -44,6 +55,7 @@ impl Manifest {
                 description: String::new(),
             },
             environment: EnvironmentSection::default(),
+            dependencies: DependencySection::default(),
         }
     }
 
@@ -109,7 +121,7 @@ impl Manifest {
         if let Some(path) = &self.environment.working_directory {
             let relative = Path::new(path);
             if path.is_empty()
-                || path.contains('\0')
+                || path.as_bytes().contains(&0)
                 || relative.is_absolute()
                 || path.starts_with('/')
                 || path.contains('\\')
@@ -118,6 +130,29 @@ impl Manifest {
             {
                 return Err(CathedralError::Manifest(format!(
                     "working_directory must be a portable relative path without traversal, got '{path}'"
+                )));
+            }
+        }
+        for (name, requirement) in &self.dependencies.packages {
+            let valid_name = !name.is_empty()
+                && name.len() <= 128
+                && name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric()
+                        || byte == b'-'
+                        || byte == b'_'
+                        || byte == b'.'
+                });
+            if !valid_name {
+                return Err(CathedralError::Manifest(format!(
+                    "invalid dependency package name '{name}'"
+                )));
+            }
+            if requirement.trim().is_empty()
+                || requirement.len() > 256
+                || requirement.as_bytes().contains(&0)
+            {
+                return Err(CathedralError::Manifest(format!(
+                    "dependency requirement for '{name}' must be 1 to 256 non-empty bytes"
                 )));
             }
         }
@@ -159,10 +194,11 @@ mod tests {
     #[test]
     fn accepts_valid_manifest() {
         let parsed = Manifest::parse(
-            "manifest_version = 1\n[experiment]\nname = \"demo-lab\"\ndescription = \"A test\"\n[environment]\nworking_directory = \"src\"\n[environment.variables]\nRUST_LOG = \"info\"",
+            "manifest_version = 1\n[experiment]\nname = \"demo-lab\"\ndescription = \"A test\"\n[environment]\nworking_directory = \"src\"\n[environment.variables]\nRUST_LOG = \"info\"\n[dependencies.packages]\nserde = \"^1.0\"",
         )
         .unwrap();
         assert_eq!(parsed.experiment.name, "demo-lab");
+        assert_eq!(parsed.dependencies.packages["serde"], "^1.0");
     }
 
     #[test]
@@ -189,6 +225,21 @@ mod tests {
         assert!(manifest.validate().is_err());
         assert!(validate_name("../bad").is_err());
         assert!(validate_name("Uppercase").is_err());
+    }
+
+    #[test]
+    fn validates_dependency_metadata_without_resolving_it() {
+        let mut manifest = Manifest::minimal("dependency-lab");
+        manifest
+            .dependencies
+            .packages
+            .insert("serde".to_owned(), "^1.0".to_owned());
+        assert!(manifest.validate().is_ok());
+        manifest
+            .dependencies
+            .packages
+            .insert("../escape".to_owned(), "*".to_owned());
+        assert!(manifest.validate().is_err());
     }
 
     #[test]
