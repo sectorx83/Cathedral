@@ -22,7 +22,7 @@ The current implementation manages metadata and workspace directories, validates
 The shared core defines:
 
 - Experiment identifiers and metadata.
-- Experiment lifecycle operations.
+- Experiment lifecycle operations with persisted `ready` and `deleting` states.
 - Manifest parsing and validation.
 - Workspace layout and safe path handling.
 - Host platform and architecture detection.
@@ -39,7 +39,7 @@ The CLI is the Phase 1 interface. It parses arguments, loads configuration, invo
 
 SQLite stores local metadata such as experiment IDs, names, paths, timestamps, and manifest versions. Filesystem contents remain in managed workspaces rather than being stored in the database.
 
-The registry uses SQLite's transactional `user_version` marker, migrates the original one-row schema marker without discarding experiment records, validates required columns, and exposes SQLite integrity checks. Experiment names have a unique constraint. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories. Manifest persistence uses a temporary sibling file followed by rename, avoiding partially written manifests. The `cathedral doctor` command verifies registry integrity, each registered workspace and manifest, and detects unregistered workspace directories.
+The registry uses SQLite's transactional `user_version` marker, migrates the original one-row schema marker without discarding experiment records, persists lifecycle state, and allows deletion to resume after an interrupted filesystem cleanup, validates required columns, and exposes SQLite integrity checks. Experiment names have a unique constraint. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories. Manifest persistence uses a temporary sibling file followed by rename, avoiding partially written manifests. The `cathedral doctor` command verifies registry integrity, each registered workspace and manifest, and detects unregistered workspace directories.
 
 ### Runtime and platform backends
 
