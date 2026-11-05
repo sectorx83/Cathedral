@@ -730,8 +730,17 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
         if record.process_start_ticks != 0 && start != record.process_start_ticks {
             return Ok(None);
         }
-        let status = fs::read_to_string(root.join("status"))?;
-        let stat = fs::read_to_string(root.join("stat"))?;
+        let status = match fs::read_to_string(root.join("status")) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        let stat = match fs::read_to_string(root.join("stat")) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        if proc_start_ticks(record.pid) != Some(start) { return Ok(None); }
         let io = fs::read_to_string(root.join("io")).unwrap_or_default();
         let (network_rx_bytes, network_tx_bytes) = proc_network_device_bytes(record.pid);
         let state = stat.split_once(") ").map(|(_, rest)| rest.split_whitespace().next().unwrap_or("?").to_owned()).unwrap_or_else(|| "?".to_owned());
