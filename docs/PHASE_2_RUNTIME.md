@@ -29,7 +29,11 @@ pids_max = 128
 
 The values map to cgroup v2 `memory.max`, `cpu.max`, and `pids.max`.
 Set `CATHEDRAL_CGROUP_ROOT` to a cgroup v2 subtree delegated to the current
-user, with the relevant controllers enabled for child cgroups. Cathedral
+user, with the relevant controllers enabled for child cgroups. For systemd
+setups, the owning user service/scope must be configured with delegation
+(`Delegate=yes`) and the `cpu`, `memory`, and/or `pids` controllers enabled in
+that subtree. Do not point this variable at the global `/sys/fs/cgroup` root;
+use a subtree actually delegated to the account running Cathedral. Cathedral
 creates one child cgroup per run and attaches the Bubblewrap process before
 it executes. If a requested controller file cannot be configured, launch
 fails instead of silently dropping the limit.
