@@ -116,6 +116,7 @@ fn main() -> Result<()> {
                     Ok(valid_path) => match Manifest::load(&valid_path.join("cathedral.toml")) {
                         Ok(manifest)
                             if manifest.experiment.name == item.name
+                                && manifest.experiment.description == item.description
                                 && manifest.manifest_version == item.manifest_version => {}
                         Ok(_) => issues.push(format!(
                             "experiment '{}' has manifest metadata that does not match the registry",
