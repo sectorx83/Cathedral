@@ -7,7 +7,11 @@
 use std::{fs, process::Command};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProbeStatus { Available, Unavailable, NotApplicable }
+pub enum ProbeStatus {
+    Available,
+    Unavailable,
+    NotApplicable,
+}
 
 impl ProbeStatus {
     pub const fn label(self) -> &'static str {
@@ -33,7 +37,9 @@ impl RuntimeProbe {
     /// Inspect host prerequisites without changing persistent host configuration.
     pub fn inspect() -> Self {
         #[cfg(target_os = "linux")]
-        { inspect_linux() }
+        {
+            inspect_linux()
+        }
         #[cfg(not(target_os = "linux"))]
         {
             Self {
@@ -56,16 +62,31 @@ fn inspect_linux() -> RuntimeProbe {
         .is_ok_and(|output| output.status.success());
     let (user_pid_mount_namespaces, network_namespace) = if unshare_installed {
         (
-            probe_unshare(&["--user", "--map-root-user", "--pid", "--fork", "--mount-proc", "/bin/true"]),
+            probe_unshare(&[
+                "--user",
+                "--map-root-user",
+                "--pid",
+                "--fork",
+                "--mount-proc",
+                "/bin/true",
+            ]),
             probe_unshare(&["--user", "--map-root-user", "--net", "--fork", "/bin/true"]),
         )
     } else {
         (ProbeStatus::Unavailable, ProbeStatus::Unavailable)
     };
     let controllers = fs::read_to_string("/sys/fs/cgroup/cgroup.controllers").ok();
-    let cgroup_v2 = if controllers.is_some() { ProbeStatus::Available } else { ProbeStatus::Unavailable };
+    let cgroup_v2 = if controllers.is_some() {
+        ProbeStatus::Available
+    } else {
+        ProbeStatus::Unavailable
+    };
     RuntimeProbe {
-        unshare_binary: if unshare_installed { ProbeStatus::Available } else { ProbeStatus::Unavailable },
+        unshare_binary: if unshare_installed {
+            ProbeStatus::Available
+        } else {
+            ProbeStatus::Unavailable
+        },
         user_pid_mount_namespaces,
         network_namespace,
         cgroup_v2,
@@ -85,7 +106,9 @@ fn probe_unshare(arguments: &[&str]) -> ProbeStatus {
 #[cfg(any(target_os = "linux", test))]
 fn controller_status(contents: Option<&str>, controller: &str) -> ProbeStatus {
     match contents {
-        Some(value) if value.split_whitespace().any(|item| item == controller) => ProbeStatus::Available,
+        Some(value) if value.split_whitespace().any(|item| item == controller) => {
+            ProbeStatus::Available
+        }
         Some(_) => ProbeStatus::Unavailable,
         None => ProbeStatus::NotApplicable,
     }
@@ -97,13 +120,22 @@ mod tests {
 
     #[test]
     fn controller_detection_requires_an_exact_token() {
-        assert_eq!(controller_status(Some("cpu memory io"), "cpu"), ProbeStatus::Available);
-        assert_eq!(controller_status(Some("cpuset memory"), "cpu"), ProbeStatus::Unavailable);
+        assert_eq!(
+            controller_status(Some("cpu memory io"), "cpu"),
+            ProbeStatus::Available
+        );
+        assert_eq!(
+            controller_status(Some("cpuset memory"), "cpu"),
+            ProbeStatus::Unavailable
+        );
     }
 
     #[test]
     fn missing_cgroup_file_is_not_misreported_as_available() {
-        assert_eq!(controller_status(None, "memory"), ProbeStatus::NotApplicable);
+        assert_eq!(
+            controller_status(None, "memory"),
+            ProbeStatus::NotApplicable
+        );
     }
 
     #[test]
