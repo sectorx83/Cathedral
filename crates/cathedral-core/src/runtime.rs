@@ -1,7 +1,7 @@
 //! Host-side runtime prerequisite inspection.
 //!
-//! These checks are diagnostic only. They do not start workloads, create a
-//! sandbox, or prove that a future runtime configuration will be enforceable.
+//! These checks run only a harmless `/usr/bin/true` probe in a temporary
+//! namespace. They do not launch experiment code or configure persistent host policy.
 
 #[cfg(target_os = "linux")]
 use std::{fs, process::Command};
@@ -27,6 +27,7 @@ impl ProbeStatus {
 pub struct RuntimeProbe {
     pub unshare_binary: ProbeStatus,
     pub bubblewrap: ProbeStatus,
+    pub bubblewrap_namespaces: ProbeStatus,
     pub user_pid_mount_namespaces: ProbeStatus,
     pub network_namespace: ProbeStatus,
     pub cgroup_v2: ProbeStatus,
@@ -46,6 +47,7 @@ impl RuntimeProbe {
             Self {
                 unshare_binary: ProbeStatus::NotApplicable,
                 bubblewrap: ProbeStatus::NotApplicable,
+                bubblewrap_namespaces: ProbeStatus::NotApplicable,
                 user_pid_mount_namespaces: ProbeStatus::NotApplicable,
                 network_namespace: ProbeStatus::NotApplicable,
                 cgroup_v2: ProbeStatus::NotApplicable,
@@ -59,6 +61,11 @@ impl RuntimeProbe {
 #[cfg(target_os = "linux")]
 fn inspect_linux() -> RuntimeProbe {
     let bubblewrap = Command::new("bwrap").arg("--version").output().is_ok_and(|output| output.status.success());
+    let bubblewrap_namespaces = if bubblewrap {
+        probe_bubblewrap()
+    } else {
+        ProbeStatus::Unavailable
+    };
     let unshare_installed = Command::new("unshare")
         .arg("--version")
         .output()
@@ -86,6 +93,7 @@ fn inspect_linux() -> RuntimeProbe {
     };
     RuntimeProbe {
         bubblewrap: if bubblewrap { ProbeStatus::Available } else { ProbeStatus::Unavailable },
+        bubblewrap_namespaces,
         unshare_binary: if unshare_installed {
             ProbeStatus::Available
         } else {
@@ -99,6 +107,16 @@ fn inspect_linux() -> RuntimeProbe {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn probe_bubblewrap() -> ProbeStatus {
+    match Command::new("bwrap").args([
+        "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
+        "--proc", "/proc", "--dev", "/dev", "--", "/usr/bin/true"
+    ]).output() {
+        Ok(output) if output.status.success() => ProbeStatus::Available,
+        Ok(_) | Err(_) => ProbeStatus::Unavailable,
+    }
+}
 #[cfg(target_os = "linux")]
 fn probe_unshare(arguments: &[&str]) -> ProbeStatus {
     match Command::new("unshare").args(arguments).output() {
@@ -147,6 +165,7 @@ mod tests {
         let result = RuntimeProbe::inspect();
         assert!(!result.unshare_binary.label().is_empty());
         assert!(!result.bubblewrap.label().is_empty());
+        assert!(!result.bubblewrap_namespaces.label().is_empty());
         assert!(!result.user_pid_mount_namespaces.label().is_empty());
         assert!(!result.network_namespace.label().is_empty());
         assert!(!result.cgroup_v2.label().is_empty());
