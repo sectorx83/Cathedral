@@ -513,6 +513,45 @@ mod tests {
         assert!(proc_start_ticks(std::process::id()).is_some());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn launches_and_captures_a_bubblewrap_workload_when_available() {
+        let available = Command::new("bwrap").args([
+            "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
+            "--symlink", "usr/bin", "/bin", "--ro-bind", "/etc", "/etc",
+            "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+            "--", "/usr/bin/true"
+        ]).status().is_ok_and(|status| status.success());
+        if !available { return; }
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path();
+        Manifest::minimal("runtime-test").write_to(&workspace.join("cathedral.toml")).unwrap();
+        let record = launch(workspace, &["/usr/bin/printf".to_owned(), "cathedral-runtime-ok".to_owned()]).unwrap();
+        let mut output = String::new();
+        for _ in 0..100 {
+            output = logs(workspace, &record.id).unwrap();
+            if output.contains("cathedral-runtime-ok") { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(output.contains("cathedral-runtime-ok"), "workload output was not captured: {output}");
+        assert!(record.pid > 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn refuses_to_stop_a_reused_process_identifier() {
+        let record = RunRecord {
+            id: "test-run".to_owned(),
+            pid: std::process::id(),
+            supervisor_pid: 0,
+            process_start_ticks: 1,
+            started_at: 0,
+            command: vec!["test".to_owned()],
+            log_file: String::new(),
+            cgroup_path: None,
+        };
+        assert_eq!(process_state(&record), ProcessState::ProcessIdentityChanged);
+    }
     #[test]
     fn empty_command_is_rejected_before_platform_dispatch() {
         assert!(launch(Path::new("/tmp"), &[]).is_err());
