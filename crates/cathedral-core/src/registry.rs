@@ -399,14 +399,14 @@ mod tests {
     }
 }
 
-    #[test]
-    fn migrates_schema_version_one_to_lifecycle_schema_two() {
-        let temp = tempdir().unwrap();
-        let path = temp.path().join("version-one.sqlite3");
-        let connection = Connection::open(&path).unwrap();
-        connection
-            .execute_batch(
-                "CREATE TABLE experiments (
+#[test]
+fn migrates_schema_version_one_to_lifecycle_schema_two() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("version-one.sqlite3");
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE experiments (
                     id TEXT PRIMARY KEY NOT NULL,
                     name TEXT NOT NULL UNIQUE,
                     description TEXT NOT NULL DEFAULT '',
@@ -416,12 +416,12 @@ mod tests {
                 );
                 INSERT INTO experiments VALUES ('id', 'version-one', '', '/tmp/version-one', 1, 1);
                 PRAGMA user_version = 1;",
-            )
-            .unwrap();
-        drop(connection);
+        )
+        .unwrap();
+    drop(connection);
 
-        let registry = Registry::open(&path).unwrap();
-        let migrated = registry.get_by_name("version-one").unwrap().unwrap();
-        assert_eq!(migrated.state, ExperimentState::Ready);
-        assert_eq!(registry.schema_version().unwrap(), 2);
-    }
+    let registry = Registry::open(&path).unwrap();
+    let migrated = registry.get_by_name("version-one").unwrap().unwrap();
+    assert_eq!(migrated.state, ExperimentState::Ready);
+    assert_eq!(registry.schema_version().unwrap(), 2);
+}
