@@ -152,3 +152,14 @@ fn cli_uses_cathedral_home_environment_override() {
     );
     assert!(home.path().join("cathedral.sqlite3").exists());
 }
+
+#[test]
+fn doctor_reports_unregistered_workspace_directories() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(cathedral(home.path(), &["init"]).status.success());
+    fs::create_dir(home.path().join("experiments").join("orphaned-workspace")).unwrap();
+
+    let doctor = cathedral(home.path(), &["doctor"]);
+    assert!(!doctor.status.success());
+    assert!(String::from_utf8_lossy(&doctor.stderr).contains("unregistered workspace"));
+}
