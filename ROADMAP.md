@@ -47,7 +47,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 2: Isolation & Observatory
 
-**Status: Implementation complete for the Linux beta backend; final CI verification pending.** Linux execution uses Bubblewrap namespaces and a restricted filesystem view, network access is denied by default, and optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor (including watch mode), process inspection, logs, and stop, with procfs/cgroup resource samples, exit diagnostics, timeout enforcement, network-namespace byte counters, and JSONL history. Windows and macOS runtime backends are explicitly unsupported and remain future work; desktop streaming observability belongs to Phase 4.
+**Status: Complete.** Phase 2 was accepted as complete before Phase 3 began. Linux execution uses Bubblewrap namespaces and a restricted filesystem view, network access is denied by default, and optional hard memory, CPU, and process-count limits use delegated cgroup v2. Linux execution uses Bubblewrap namespaces and a restricted filesystem view, network access is denied by default, and optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor (including watch mode), process inspection, logs, and stop, with procfs/cgroup resource samples, exit diagnostics, timeout enforcement, network-namespace byte counters, and JSONL history. Windows and macOS runtime backends are explicitly unsupported and remain future work; desktop streaming observability belongs to Phase 4.
 
 **Objective:** Execute experiments under explicit, inspectable resource and isolation policies.
 
@@ -81,6 +81,8 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 - Platform-specific guarantees and limitations are documented and tested.
 
 ## Phase 3: Snapshot & Reproduction Engine
+
+**Status: Implementation in progress; cross-platform CI verification pending.** The current revision implements filesystem checkpoints with SHA-256 manifests, snapshot listing/verification/comparison, staged restoration, portable `.cath` export/import, and strict OS/architecture checks for reproduction. Dependency declarations are preserved but not installed or resolved.
 
 **Objective:** Package experiment inputs and checkpoints so compatible machines can recreate an experiment and report differences.
 

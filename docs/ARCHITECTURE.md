@@ -63,9 +63,9 @@ The Phase 2 CLI observatory collects process state, virtual/resident memory, CPU
 
 ### Snapshot and reproduction
 
-The snapshot subsystem is planned for Phase 3. It will record filesystem state and metadata with integrity verification. The reproduction subsystem will validate package contents, dependencies, platform requirements, and compatibility before rebuilding an experiment.
+The Phase 3 snapshot subsystem records filesystem state in versioned metadata with SHA-256 integrity hashes. Checkpoints are stored outside experiment workspaces and can be listed, verified, compared, and restored through a staged directory swap. Portable `.cath` packages contain a versioned header, length-prefixed metadata, and ordered file payloads. Import validates metadata, relative paths, sizes, hashes, and the embedded manifest before creating a new experiment. Reproduction additionally checks operating-system and architecture equality.
 
-Filesystem checkpointing must remain distinct from VM snapshots and live process-state capture.
+The initial format preserves regular files and directories only. It rejects symlinks and special files, and does not preserve ownership, permissions, ACLs, extended attributes, hard links, sparse-file layout, live process memory, open descriptors, namespaces, kernel state, or the host OS. Dependency declarations are preserved but not installed or resolved. Matching OS and architecture is a compatibility preflight, not a guarantee of bit-for-bit reproduction.
 
 ### Local API and Studio
 

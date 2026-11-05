@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phase 1 is complete. Phase 2 implementation is complete for the Linux beta backend: Bubblewrap isolation, optional cgroup v2 enforcement, process lifecycle controls, logs, exit/timeout diagnostics, and resource/network-namespace telemetry are implemented. Final cross-platform CI verification for the latest commits is pending. Windows and macOS execution backends remain unsupported. Phase 3 and Phase 4 remain future work.
+> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation is in progress: filesystem snapshots, SHA-256 integrity checks, snapshot comparison and restoration, portable `.cath` packages, import, and host compatibility checks are implemented in the current development revision. Phase 3 still requires cross-platform CI verification. Windows and macOS workload isolation remain unsupported.
 
 ## What Cathedral is
 
@@ -22,8 +22,8 @@ The intended workflow is:
 2. Create a managed workspace.
 3. Run it with platform-appropriate isolation and resource controls.
 4. Observe processes, resource usage, logs, and failures.
-5. Capture a checkpoint and export the experiment.
-6. Recreate it on another compatible machine and inspect any differences.
+5. Capture and verify filesystem checkpoints, compare revisions, and restore a previous state.
+6. Export a portable package, import it elsewhere, and check host compatibility before reproduction.
 
 ## Implemented foundation
 
@@ -141,15 +141,17 @@ The project is organized into four phases:
 
 See [ROADMAP.md](ROADMAP.md) for scope and completion criteria.
 
-## Planned CLI beyond Phase 2
+## Snapshot and reproduction CLI
 
-Snapshots and reproduction are **not available yet**:
+Phase 3 adds these commands:
 
 ```text
 cathedral snapshot my-experiment
 cathedral snapshots my-experiment
+cathedral verify my-experiment <snapshot>
+cathedral compare my-experiment <snapshot-a> <snapshot-b>
 cathedral restore my-experiment <snapshot>
-cathedral export my-experiment
+cathedral export my-experiment [output.cath]
 cathedral import experiment.cath
 cathedral reproduce experiment.cath
 ```
@@ -160,6 +162,7 @@ cathedral reproduce experiment.cath
 - [Roadmap](ROADMAP.md): the four approved phases and their acceptance criteria.
 - [Platform support](docs/PLATFORM_SUPPORT.md): cross-platform strategy and capability reporting.
 - [Experiment manifest](docs/EXPERIMENT_MANIFEST.md): version-1 `cathedral.toml` format.
+- [Snapshot and reproduction](docs/PHASE_3_SNAPSHOT.md): checkpoint format, integrity guarantees, package workflow, and limitations.
 - [Development setup](docs/DEVELOPMENT.md): development workflow and quality gates.
 - [CI verification record](docs/CI_STATUS.md): latest source revision verified across Linux, Windows, and macOS.
 - [Security model](SECURITY.md): threat model, isolation boundaries, and security commitments.
@@ -167,7 +170,7 @@ cathedral reproduce experiment.cath
 
 ## Technology direction
 
-The core and CLI use Rust. SQLite stores local metadata. A Tauri + React + TypeScript desktop application is planned for the final phase. A local API is expected to use Axum with WebSockets where streaming updates are needed.
+The core and CLI use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. A Tauri + React + TypeScript desktop application is planned for the final phase. A local API is expected to use Axum with WebSockets where streaming updates are needed.
 
 The Linux runtime currently uses Bubblewrap namespaces and a restricted mount view, with optional cgroup v2 resource controls. Windows and macOS native isolation backends remain future work.
 
