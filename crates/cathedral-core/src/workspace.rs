@@ -25,7 +25,18 @@ impl Workspace {
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                std::fs::create_dir(&self.root)?;
+                match std::fs::create_dir(&self.root) {
+                    Ok(()) => {}
+                    Err(create_error)
+                        if create_error.kind() == std::io::ErrorKind::AlreadyExists =>
+                    {
+                        let metadata = std::fs::symlink_metadata(&self.root)?;
+                        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                            return Err(CathedralError::UnsafePath(self.root.clone()));
+                        }
+                    }
+                    Err(create_error) => return Err(create_error.into()),
+                }
             }
             Err(error) => return Err(error.into()),
         }
@@ -96,6 +107,30 @@ mod tests {
             workspace.remove(temp.path()),
             Err(CathedralError::UnsafePath(_))
         ));
+    }
+
+    #[test]
+    fn concurrent_initialization_is_idempotent() {
+        use std::sync::{Arc, Barrier};
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+        let barrier = Arc::new(Barrier::new(8));
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let root = root.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let workspace = Workspace::new(&root).unwrap();
+                    barrier.wait();
+                    workspace.initialize()
+                })
+            })
+            .collect();
+
+        for worker in workers {
+            worker.join().unwrap().unwrap();
+        }
     }
 
     #[test]
