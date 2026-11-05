@@ -87,9 +87,15 @@ fn main() -> Result<()> {
             if items.is_empty() {
                 println!("No experiments yet. Create one with: cathedral create <name>");
             } else {
-                println!("{:<22} {:<36} CREATED", "NAME", "ID");
+                println!("{:<22} {:<36} {:<10} CREATED", "NAME", "ID", "STATE");
                 for item in items {
-                    println!("{:<22} {:<36} {}", item.name, item.id, item.created_at);
+                    println!(
+                        "{:<22} {:<36} {:<10} {}",
+                        item.name,
+                        item.id,
+                        item.state.as_str(),
+                        item.created_at
+                    );
                 }
             }
         }
@@ -100,6 +106,7 @@ fn main() -> Result<()> {
             println!("Description: {}", item.description);
             println!("Workspace: {}", item.workspace_path);
             println!("Manifest version: {}", item.manifest_version);
+            println!("State: {}", item.state.as_str());
             println!("Created (Unix): {}", item.created_at);
         }
         Command::Delete { name } => {
@@ -116,6 +123,12 @@ fn main() -> Result<()> {
             let mut known_workspaces = HashSet::new();
 
             for item in &items {
+                if item.state.as_str() == "deleting" {
+                    issues.push(format!(
+                        "experiment '{}' has an interrupted deletion; rerun cathedral delete {}",
+                        item.name, item.name
+                    ));
+                }
                 let path = Path::new(&item.workspace_path);
                 match workspace.validate(path) {
                     Ok(valid_path) => {
