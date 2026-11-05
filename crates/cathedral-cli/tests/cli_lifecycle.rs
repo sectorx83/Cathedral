@@ -30,10 +30,12 @@ fn cli_can_initialize_create_inspect_list_and_delete() {
     let inspect = cathedral(home.path(), &["inspect", "integration-lab"]);
     assert!(inspect.status.success());
     assert!(String::from_utf8_lossy(&inspect.stdout).contains("integration-lab"));
+    assert!(String::from_utf8_lossy(&inspect.stdout).contains("State: ready"));
 
     let list = cathedral(home.path(), &["list"]);
     assert!(list.status.success());
     assert!(String::from_utf8_lossy(&list.stdout).contains("integration-lab"));
+    assert!(String::from_utf8_lossy(&list.stdout).contains("ready"));
 
     let doctor = cathedral(home.path(), &["doctor"]);
     assert!(
