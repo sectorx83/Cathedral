@@ -31,6 +31,7 @@ pub struct RuntimeProbe {
     pub user_pid_mount_namespaces: ProbeStatus,
     pub network_namespace: ProbeStatus,
     pub cgroup_v2: ProbeStatus,
+    pub cgroup_kill: ProbeStatus,
     pub cpu_controller: ProbeStatus,
     pub memory_controller: ProbeStatus,
 }
@@ -51,6 +52,7 @@ impl RuntimeProbe {
                 user_pid_mount_namespaces: ProbeStatus::NotApplicable,
                 network_namespace: ProbeStatus::NotApplicable,
                 cgroup_v2: ProbeStatus::NotApplicable,
+                cgroup_kill: ProbeStatus::NotApplicable,
                 cpu_controller: ProbeStatus::NotApplicable,
                 memory_controller: ProbeStatus::NotApplicable,
             }
@@ -102,6 +104,7 @@ fn inspect_linux() -> RuntimeProbe {
         user_pid_mount_namespaces,
         network_namespace,
         cgroup_v2,
+        cgroup_kill: if fs::metadata("/sys/fs/cgroup/cgroup.kill").is_ok() { ProbeStatus::Available } else { ProbeStatus::Unavailable },
         cpu_controller: controller_status(controllers.as_deref(), "cpu"),
         memory_controller: controller_status(controllers.as_deref(), "memory"),
     }
@@ -174,6 +177,7 @@ mod tests {
         assert!(!result.user_pid_mount_namespaces.label().is_empty());
         assert!(!result.network_namespace.label().is_empty());
         assert!(!result.cgroup_v2.label().is_empty());
+        assert!(!result.cgroup_kill.label().is_empty());
         assert!(!result.cpu_controller.label().is_empty());
         assert!(!result.memory_controller.label().is_empty());
     }
