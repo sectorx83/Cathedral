@@ -41,6 +41,9 @@ pub struct ProcessMetrics {
     pub system_cpu_ticks: u64,
     pub read_bytes: u64,
     pub write_bytes: u64,
+    pub cgroup_memory_current_bytes: Option<u64>,
+    pub cgroup_cpu_usage_usec: Option<u64>,
+    pub cgroup_process_count: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,7 +270,11 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
 
 fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
     let limits = &manifest.resources;
-    if limits.memory_max_bytes.is_none() && limits.cpu_quota_percent.is_none() && limits.pids_max.is_none() {
+    let has_limits = limits.memory_max_bytes.is_some()
+        || limits.cpu_quota_percent.is_some()
+        || limits.pids_max.is_some();
+    let configured_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT");
+    if !has_limits && configured_root.is_none() {
         return Ok(None);
     }
     #[cfg(not(target_os = "linux"))]
@@ -276,7 +283,7 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
     }
     #[cfg(target_os = "linux")]
     {
-        let configured = std::env::var_os("CATHEDRAL_CGROUP_ROOT").ok_or_else(|| CathedralError::Manifest(
+        let configured = configured_root.ok_or_else(|| CathedralError::Manifest(
             "resource limits were requested but CATHEDRAL_CGROUP_ROOT is not configured to a delegated cgroup v2 directory".to_owned()))?;
         let root = PathBuf::from(configured).canonicalize()?;
         if !root.join("cgroup.controllers").is_file() || !root.join("cgroup.procs").is_file() {
@@ -414,7 +421,21 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
                 (name == key).then(|| value.trim().parse().ok()).flatten()
             }).unwrap_or(0)
         };
-        Ok(Some(ProcessMetrics {
+        let cgroup_memory_current_bytes = record.cgroup_path.as_ref().and_then(|path| {
+            fs::read_to_string(PathBuf::from(path).join("memory.current")).ok()?.trim().parse().ok()
+        });
+        let cgroup_cpu_usage_usec = record.cgroup_path.as_ref().and_then(|path| {
+            fs::read_to_string(PathBuf::from(path).join("cpu.stat")).ok()?.lines().find_map(|line| {
+                let mut fields = line.split_whitespace();
+                (fields.next()? == "usage_usec").then(|| fields.next()?.parse().ok()).flatten()
+            })
+        });
+        let cgroup_process_count = record.cgroup_path.as_ref().and_then(|path| {
+            fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).ok().map(|value| {
+                value.lines().filter(|line| !line.trim().is_empty()).count() as u64
+            })
+        });
+        let snapshot = ProcessMetrics {
             pid: record.pid,
             state,
             parent_pid,
@@ -424,7 +445,28 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
             system_cpu_ticks,
             read_bytes: io_value("read_bytes"),
             write_bytes: io_value("write_bytes"),
-        }))
+            cgroup_memory_current_bytes,
+            cgroup_cpu_usage_usec,
+            cgroup_process_count,
+        };
+        let history_path = PathBuf::from(&record.log_file).with_file_name("metrics.jsonl");
+        let mut history = OpenOptions::new().create(true).append(true).open(history_path)?;
+        let history_line = serde_json::json!({
+            "timestamp": now_seconds(),
+            "pid": snapshot.pid,
+            "state": snapshot.state,
+            "virtual_memory_kb": snapshot.virtual_memory_kb,
+            "resident_memory_kb": snapshot.resident_memory_kb,
+            "user_cpu_ticks": snapshot.user_cpu_ticks,
+            "system_cpu_ticks": snapshot.system_cpu_ticks,
+            "read_bytes": snapshot.read_bytes,
+            "write_bytes": snapshot.write_bytes,
+            "cgroup_memory_current_bytes": snapshot.cgroup_memory_current_bytes,
+            "cgroup_cpu_usage_usec": snapshot.cgroup_cpu_usage_usec,
+            "cgroup_process_count": snapshot.cgroup_process_count
+        });
+        writeln!(history, "{history_line}")?;
+        Ok(Some(snapshot))
     }
 }
 
