@@ -688,7 +688,7 @@ mod tests {
         let mut output = String::new();
         for _ in 0..100 {
             output = logs(&run_root, &record.id).unwrap();
-            if output.contains("cathedral-runtime-ok") { break; }
+            if output.contains("cathedral-runtime-ok") && exit_status(&record).is_some() { break; }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert!(output.contains("cathedral-runtime-ok"), "workload output was not captured: {output}");
@@ -703,7 +703,8 @@ mod tests {
             id: "test-run".to_owned(),
             pid: std::process::id(),
             supervisor_pid: 0,
-            process_start_ticks: 1,
+            supervisor_start_ticks: 1,
+            process_start_ticks: 0,
             started_at: 0,
             command: vec!["test".to_owned()],
             log_file: String::new(),
