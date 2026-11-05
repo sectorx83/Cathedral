@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phase 1 is complete. Phase 2 now has a Linux Bubblewrap execution backend, optional cgroup v2 resource enforcement, process controls, captured logs, and resource sampling. Windows and macOS execution backends are not implemented. Phase 3 and Phase 4 remain future work.
+> **Project status:** Phase 1 is complete. Phase 2 is complete for the Linux beta backend: Bubblewrap isolation, optional cgroup v2 enforcement, process lifecycle controls, logs, exit/timeout diagnostics, and resource/network-namespace telemetry are implemented. Windows and macOS execution backends remain unsupported. Phase 3 and Phase 4 remain future work.
 
 ## What Cathedral is
 
