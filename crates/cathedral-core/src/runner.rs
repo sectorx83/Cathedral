@@ -385,10 +385,8 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         if let Err(error) = atomic_write(&directory.join("run.json"), &encoded) {
             if let Some(path) = &record.cgroup_path {
                 let _ = fs::write(PathBuf::from(path).join("cgroup.kill"), "1");
-                let _ = fs::remove_dir(path);
-            } else {
-                let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
             }
+            let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
             return Err(error);
         }
         Ok(record)
