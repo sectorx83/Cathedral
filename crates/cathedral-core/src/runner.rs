@@ -88,30 +88,41 @@ fn ensure_real_directory(path: &Path) -> Result<PathBuf> {
     Ok(path.canonicalize()?)
 }
 
-fn ensure_run_root(run_root: &Path) -> Result<PathBuf> {
+fn validate_run_root(run_root: &Path) -> Result<PathBuf> {
     let runs_parent = run_root.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
     let data_root = runs_parent.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
     let canonical_data = data_root.canonicalize()?;
-    let canonical_runs = ensure_real_directory(runs_parent)?;
+    let runs_metadata = fs::symlink_metadata(runs_parent)?;
+    if runs_metadata.file_type().is_symlink() || !runs_metadata.is_dir() {
+        return Err(CathedralError::UnsafePath(runs_parent.to_path_buf()));
+    }
+    let canonical_runs = runs_parent.canonicalize()?;
     if canonical_runs.parent() != Some(canonical_data.as_path()) {
         return Err(CathedralError::UnsafePath(canonical_runs));
     }
-    let canonical_root = ensure_real_directory(run_root)?;
+    let root_metadata = fs::symlink_metadata(run_root)?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        return Err(CathedralError::UnsafePath(run_root.to_path_buf()));
+    }
+    let canonical_root = run_root.canonicalize()?;
     if canonical_root.parent() != Some(canonical_runs.as_path()) {
         return Err(CathedralError::UnsafePath(canonical_root));
     }
     Ok(canonical_root)
 }
 
+fn ensure_run_root(run_root: &Path) -> Result<PathBuf> {
+    let runs_parent = run_root.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
+    ensure_real_directory(runs_parent)?;
+    ensure_real_directory(run_root)?;
+    validate_run_root(run_root)
+}
+
 fn run_directory(run_root: &Path, id: &str) -> Result<PathBuf> {
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
         return Err(CathedralError::Manifest("invalid run identifier".to_owned()));
     }
-    let root_metadata = fs::symlink_metadata(run_root)?;
-    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
-        return Err(CathedralError::UnsafePath(run_root.to_path_buf()));
-    }
-    let root = run_root.canonicalize()?;
+    let root = validate_run_root(run_root)?;
     let path = root.join(id);
     let metadata = fs::symlink_metadata(&path)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() || path.canonicalize()?.parent() != Some(root.as_path()) {
@@ -160,6 +171,7 @@ pub fn list_runs(run_root: &Path) -> Result<Vec<RunRecord>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error.into()),
     }
+    let root = validate_run_root(run_root)?;
     let mut records = Vec::new();
     for entry in fs::read_dir(root)? {
         let entry = entry?;
