@@ -466,6 +466,9 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
             let kill_file = PathBuf::from(path).join("cgroup.kill");
             if kill_file.is_file() {
                 fs::write(kill_file, "1")?;
+                if !record.exit_status_file.is_empty() {
+                    let _ = fs::write(&record.exit_status_file, "signal:SIGTERM\n");
+                }
                 return Ok(());
             }
         }
@@ -476,6 +479,9 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
         if !status.success() {
             return Err(CathedralError::Manifest("failed to send SIGTERM to the workload process group".to_owned()));
         }
+        if !record.exit_status_file.is_empty() {
+            let _ = fs::write(&record.exit_status_file, "signal:SIGTERM\n");
+        }
         Ok(())
     }
 }
@@ -483,6 +489,12 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
 pub fn exit_status(record: &RunRecord) -> Option<i32> {
     if record.exit_status_file.is_empty() { return None; }
     fs::read_to_string(&record.exit_status_file).ok()?.trim().parse().ok()
+}
+
+pub fn termination_signal(record: &RunRecord) -> Option<String> {
+    if record.exit_status_file.is_empty() { return None; }
+    let value = fs::read_to_string(&record.exit_status_file).ok()?;
+    value.trim().strip_prefix("signal:").map(str::to_owned)
 }
 pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     let directory = run_directory(run_root, run_id)?;
