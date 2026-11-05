@@ -43,7 +43,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 - Unit and integration tests pass on the supported Phase 1 CI targets.
 - Setup, architecture, and CLI documentation match the implemented behavior.
 
-**Not included:** Windows/macOS workload backends, configurable network allowlists, disk quotas, network traffic accounting, a background observability daemon, or the desktop application.
+**Not included:** running workloads, claiming sandbox isolation, live observability, snapshots, export/import, or the desktop application.
 
 ## Phase 2: Isolation & Observatory
 
