@@ -1,5 +1,5 @@
 //! Cathedral's platform-neutral experiment management foundation.
-//! Workload execution and sandbox isolation are deliberately out of scope here.
+//! Linux workload execution, containment, and observability live in the runner modules.
 
 pub mod manifest;
 pub mod platform;
