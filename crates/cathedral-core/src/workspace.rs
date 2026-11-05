@@ -82,6 +82,7 @@ impl Workspace {
         if canonical == root
             || !canonical.starts_with(&root)
             || canonical.parent() != Some(root.as_path())
+            || canonical.file_name() != path.file_name()
             || canonical
                 .components()
                 .any(|part| matches!(part, Component::ParentDir))
@@ -120,7 +121,9 @@ impl Workspace {
             return Err(CathedralError::UnsafePath(path.to_path_buf()));
         }
         let canonical = path.canonicalize()?;
-        if canonical.parent() != Some(root.as_path()) {
+        if canonical.parent() != Some(root.as_path())
+            || canonical.file_name() != path.file_name()
+        {
             return Err(CathedralError::UnsafePath(canonical));
         }
         std::fs::remove_dir_all(canonical)?;
