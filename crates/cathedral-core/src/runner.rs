@@ -186,7 +186,9 @@ pub fn list_runs(run_root: &Path) -> Result<Vec<RunRecord>> {
             if file_metadata.file_type().is_symlink() || !file_metadata.is_file() {
                 return Err(CathedralError::UnsafePath(record_path));
             }
-            records.push(read_record(&record_path)?);
+            let record = read_record(&record_path)?;
+            cleanup_finished(&record)?;
+            records.push(record);
             }
         }
     }
