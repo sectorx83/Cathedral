@@ -277,7 +277,7 @@ fn row_to_experiment(row: &rusqlite::Row<'_>) -> rusqlite::Result<Experiment> {
                 rusqlite::types::Type::Text,
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-"unknown experiment state",
+                    "unknown experiment state",
                 )),
             ));
         }
