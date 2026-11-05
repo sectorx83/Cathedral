@@ -24,8 +24,7 @@ pub struct Registry {
 }
 
 impl Registry {
-    pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
+    pub fn open(path: &Path) -> Result<Self> {\n        tracing::debug!(registry_path = %path.display(), "opening experiment registry");\n        if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
@@ -98,7 +97,7 @@ impl Registry {
         verify_experiment_columns(&transaction)?;
         transaction.commit()?;
 
-        Ok(Self { connection })
+        tracing::debug!(schema_version = REGISTRY_SCHEMA_VERSION, "experiment registry ready");\n        Ok(Self { connection })
     }
 
     pub fn schema_version(&self) -> Result<i64> {
