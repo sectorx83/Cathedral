@@ -59,3 +59,6 @@ Include affected versions or commits, platform and configuration, reproduction s
 ## Security release policy
 
 Security fixes should include regression tests where practical, a clear impact statement, affected versions, mitigations, and release notes. Security claims must be reviewed against the actual implementation on each supported platform.
+
+
+Run records, status files, logs, and resource history are stored under Cathedral's data directory, outside the writable experiment workspace. The sandbox does not receive a bind mount of the registry or run-control directory.
