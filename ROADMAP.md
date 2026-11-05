@@ -47,7 +47,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 2: Isolation & Observatory
 
-**Status: In progress.** The initial runtime preflight is implemented. It checks Linux namespace prerequisites and cgroup v2 controller availability, and `cathedral doctor` reports the results. Workload execution, enforced limits, and live observability are not implemented yet.
+**Status: In progress (Linux beta backend implemented).** Linux execution now uses Bubblewrap namespaces and a restricted filesystem view. Optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor, processes, logs, and stop, with on-demand procfs/cgroup resource samples. Windows and macOS workload backends, streaming monitoring, exit-code collection, and automatic timeout policies remain outstanding.
 
 **Objective:** Execute experiments under explicit, inspectable resource and isolation policies.
 
@@ -61,7 +61,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 - Investigate a Windows backend using Job Objects and suitable isolation facilities.
 - Investigate a macOS backend using supported sandboxing or virtualization facilities.
 - Add observability for CPU, memory, disk activity, processes, logs, and resource history.
-- Capture exit status, signals, timeouts, and runtime failures in structured diagnostics.
+- Capture runtime failures and process termination details in structured diagnostics. Exit-code collection and automatic timeout policies remain future work.
 
 ### Intended CLI surface
 
