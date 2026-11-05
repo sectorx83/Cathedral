@@ -6,7 +6,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use cathedral_core::{
     create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
-    manifest::Manifest, platform::PlatformInfo, runner, workspace::Workspace,
+    manifest::Manifest, platform::PlatformInfo, runner, snapshot, workspace::Workspace,
 };
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
@@ -60,6 +60,22 @@ enum Command {
     Processes { name: String },
     /// Stop a workload and verify process cleanup by run identifier.
     Stop { name: String, run_id: String },
+    /// Create an integrity-checked filesystem checkpoint.
+    Snapshot { name: String },
+    /// List an experiment's checkpoints.
+    Snapshots { name: String },
+    /// Verify a checkpoint's SHA-256 integrity.
+    Verify { name: String, snapshot: String },
+    /// Compare two checkpoints.
+    Compare { name: String, first: String, second: String },
+    /// Restore a verified checkpoint.
+    Restore { name: String, snapshot: String },
+    /// Export an experiment as a portable .cath package.
+    Export { name: String, output: Option<PathBuf> },
+    /// Import an experiment from a .cath package.
+    Import { package: PathBuf },
+    /// Reproduce a package after strict host compatibility checks.
+    Reproduce { package: PathBuf },
 }
 
 fn data_dir(override_path: Option<PathBuf>) -> Result<PathBuf> {
@@ -216,6 +232,47 @@ fn main() -> Result<()> {
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             runner::stop(&run_root, &run_id)?;
             println!("Stopped run {run_id}");
+        }
+        Command::Snapshot { name } => {
+            let s = snapshot::create(&root, &name)?;
+            println!("Created snapshot {}", s.id);
+            println!("Files: {} | Directories: {} | Bytes: {}", s.files, s.directories, s.bytes);
+        }
+        Command::Snapshots { name } => {
+            let items = snapshot::list(&root, &name)?;
+            if items.is_empty() { println!("No snapshots recorded for '{name}'."); }
+            for s in items { println!("{}  {} files  {} bytes  created {}", s.id, s.files, s.bytes, s.created_at); }
+        }
+        Command::Verify { name, snapshot: id } => {
+            let s = snapshot::verify(&root, &name, &id)?;
+            println!("Snapshot integrity: OK ({} files, {} bytes)", s.files, s.bytes);
+        }
+        Command::Compare { name, first, second } => {
+            let changes = snapshot::compare(&root, &name, &first, &second)?;
+            if changes.is_empty() { println!("Snapshots are identical."); }
+            for d in &changes { println!("{:<8} {}", d.change, d.path); }
+            println!("{} difference(s)", changes.len());
+        }
+        Command::Restore { name, snapshot: id } => {
+            snapshot::restore(&root, &name, &id)?;
+            println!("Restored '{name}' from snapshot {id}");
+        }
+        Command::Export { name, output } => {
+            let path = output.unwrap_or_else(|| PathBuf::from(format!("{name}.cath")));
+            let r = snapshot::export(&root, &name, &path)?;
+            println!("Exported '{}' to {}", r.name, path.display());
+            println!("Declared dependencies: {} (recorded, not installed)", r.dependencies);
+        }
+        Command::Import { package } => {
+            let r = snapshot::import(&root, &package, false)?;
+            println!("Imported '{}' (ID: {})", r.name, r.id);
+            println!("Host match: {}", if r.compatible { "yes" } else { "no; inspect requirements before running" });
+            println!("Declared dependencies: {} (not installed)", r.dependencies);
+        }
+        Command::Reproduce { package } => {
+            let r = snapshot::import(&root, &package, true)?;
+            println!("Reproduced '{}' (ID: {})", r.name, r.id);
+            println!("OS and architecture match verified; declared dependencies still require provisioning.");
         }
         Command::Doctor => {
             let registry = initialize(&root)?;
