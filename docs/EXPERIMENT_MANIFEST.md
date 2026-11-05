@@ -23,6 +23,11 @@ working_directory = "."
 [environment.variables]
 RUST_LOG = "info"
 
+[resources]
+memory_max_bytes = 536870912
+cpu_quota_percent = 100
+pids_max = 128
+
 [dependencies.packages]
 serde = "^1.0"
 ```
@@ -31,7 +36,7 @@ The `experiment.name` field is required. Names must be 1-48 characters, start wi
 
 The description is optional and limited to 4096 bytes. The environment section is optional. Its working directory, when supplied, must be a portable relative path without parent-directory traversal, empty path segments, or platform-specific separators. Environment variable names must follow the portable ASCII identifier convention.
 
-The optional `dependencies.packages` table records package names and their declared version requirement strings. Package names are limited to portable ASCII letters, digits, hyphens, underscores, and periods. Requirement strings must be non-empty and at most 256 bytes. These strings are opaque metadata in Phase 1: Cathedral does not resolve, download, verify, or install packages yet.
+The optional `[resources]` table declares Linux cgroup v2 hard limits. `memory_max_bytes` sets `memory.max`; `cpu_quota_percent` sets `cpu.max` as a percentage of one logical CPU (100 = one CPU); and `pids_max` sets `pids.max`. Values must be positive, and CPU quota must be between 1 and 1000. These limits require `CATHEDRAL_CGROUP_ROOT` to point to a delegated cgroup v2 subtree with the requested controllers enabled. Cathedral refuses to launch if a requested limit cannot be applied. The optional `dependencies.packages` table records package names and their declared version requirement strings. Package names are limited to portable ASCII letters, digits, hyphens, underscores, and periods. Requirement strings must be non-empty and at most 256 bytes. These strings are opaque metadata in Phase 1: Cathedral does not resolve, download, verify, or install packages yet.
 
 ## CLI usage
 
@@ -62,7 +67,7 @@ The current parser:
 7. Validates dependency package identifiers and non-empty requirement strings.
 8. Returns a field-specific parsing or validation error where available.
 
-Manifest values are treated as data. Phase 1 does not execute commands, resolve or install dependencies, or launch workloads.
+Manifest values are treated as data. Declared dependencies remain metadata only and are not resolved or installed. Linux runtime commands are supplied explicitly to `cathedral run`; no shell snippets are embedded in the manifest.
 
 ## Secrets and host-specific values
 
