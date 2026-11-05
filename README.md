@@ -7,7 +7,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phase 1 foundation is under active implementation. The experiment registry, manifest parser, workspace manager, and initial CLI are now in the repository. Runtime isolation, observability, snapshots, reproduction, and desktop studio are not implemented yet.
+> **Project status:** Phase 1 foundation is implemented and undergoing cross-platform CI verification. Runtime isolation, live observability, snapshots, reproduction, and desktop Studio are not implemented yet.
 
 ## What Cathedral is
 
@@ -80,13 +80,16 @@ working_directory = "."
 
 [environment.variables]
 RUST_LOG = "info"
+
+[dependencies.packages]
+serde = "^1.0"
 ```
 
 ```sh
 cargo run -p cathedral -- create hello-lab --manifest ./cathedral.toml
 ```
 
-Manifest values are configuration data. Phase 1 does not execute commands, install dependencies, or launch workloads.
+Manifest values are configuration data. Declared dependency requirements are recorded as metadata only. Phase 1 does not resolve or install dependencies, execute commands, or launch workloads.
 
 ## Design principles
 
