@@ -291,9 +291,20 @@ fn main() -> Result<()> {
                 "  cgroup memory controller: {}",
                 runtime.memory_controller.label()
             );
-            println!(
-                "Workload isolation: not yet enabled; prerequisite checks are diagnostic only."
-            );
+            let namespace_ready = runtime.bubblewrap == cathedral_core::runtime::ProbeStatus::Available
+                && runtime.user_pid_mount_namespaces == cathedral_core::runtime::ProbeStatus::Available
+                && runtime.network_namespace == cathedral_core::runtime::ProbeStatus::Available;
+            println!("Linux isolation prerequisites: {}", if namespace_ready { "available" } else { "incomplete" });
+            let cgroup_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT").map(PathBuf::from);
+            let cgroup_root_status = cgroup_root.as_ref().map(|path| {
+                if path.join("cgroup.controllers").is_file() && path.join("cgroup.procs").is_file() {
+                    "configured (delegation is verified at run time)"
+                } else {
+                    "invalid or not a cgroup v2 directory"
+                }
+            }).unwrap_or("not configured");
+            println!("Delegated cgroup root: {cgroup_root_status}");
+            println!("Windows/macOS workload isolation: unsupported in this release");
 
             if !issues.is_empty() {
                 for issue in &issues {
