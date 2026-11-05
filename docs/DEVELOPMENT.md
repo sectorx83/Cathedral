@@ -54,11 +54,9 @@ Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data dire
 ## Test layers
 
 1. Unit tests for domain types, validation, and state transitions.
-2. Registry tests using temporary SQLite databases.
+2. Registry tests using temporary SQLite databases, including schema migration, unsupported versions, duplicate legacy markers, and integrity checks.
 3. Workspace tests using temporary directories and adversarial path cases.
-4. Registry tests for schema migration, unsupported versions, duplicate legacy markers, and SQLite integrity.
-5. CLI tests for duplicate creation, invalid names, doctor consistency checks, and data-directory overrides.
-4. Integration tests for complete CLI workflows.
+4. CLI integration tests for complete lifecycle workflows, duplicate creation, invalid names, doctor consistency checks, and data-directory overrides.
 5. Platform tests for capability detection and runtime enforcement.
 6. Reproduction tests for corrupted, incomplete, and incompatible packages.
 
