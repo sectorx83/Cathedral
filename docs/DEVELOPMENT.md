@@ -36,6 +36,7 @@ cargo run -p cathedral -- inspect demo-lab
 cargo run -p cathedral -- doctor
 cargo run -p cathedral -- run demo-lab -- /usr/bin/printf hello
 cargo run -p cathedral -- monitor demo-lab
+cargo run -p cathedral -- monitor demo-lab --watch --interval-seconds 2
 cargo run -p cathedral -- processes demo-lab
 cargo run -p cathedral -- logs demo-lab
 RUST_LOG=cathedral_core=debug,cathedral=debug cargo run -p cathedral -- doctor
