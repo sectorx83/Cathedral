@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 1 detects the host operating system and architecture on Linux, Windows, and macOS. Phase 2 has started a read-only Linux runtime preflight: `cathedral doctor` checks whether user/PID/mount and network namespaces can be created through `unshare`, and whether cgroup v2 exposes CPU and memory controllers. These checks do not launch experiments or enforce resource limits. No operating system currently has an implemented workload isolation backend.
+Phase 1 host detection and experiment management compile on Linux, Windows, and macOS. Phase 2 implements the first workload backend on Linux using Bubblewrap namespaces and a restricted filesystem view. Optional hard memory, CPU, and process-count limits use a delegated cgroup v2 subtree. Windows and macOS do not yet have workload backends; their runtime commands fail explicitly.
 
 Linux is the first runtime implementation target. Windows and macOS remain first-class architectural targets, but their functionality must be delivered through native backends and tested independently.
 
@@ -20,15 +20,15 @@ The CLI and future Studio must display these differences clearly. They must not 
 
 ## Linux
 
-Planned first backend:
+Implemented first backend:
 
-- Namespaces for process, mount, user, and network isolation where supported and correctly configured.
-- cgroups v2 for resource accounting and enforcement.
-- Filesystem isolation using appropriate mount and layering mechanisms.
-- Explicit privilege and kernel-feature checks.
-- Cleanup and recovery for interrupted workloads.
+- Bubblewrap user, PID, IPC, UTS, and network namespaces.
+- Read-only `/usr` and `/etc`, writable experiment workspace, private `/tmp`, and a cleared inherited environment.
+- Optional cgroup v2 `memory.max`, `cpu.max`, and `pids.max` controls; requested limits fail closed when delegation is unavailable.
+- Process identity tracking, process-group/cgroup termination, combined logs, and procfs/cgroup resource samples.
+- Runtime prerequisite checks through `cathedral doctor`.
 
-Availability depends on kernel configuration, distribution, delegated cgroup permissions, and user namespace policy. Cathedral must test these prerequisites before launching a workload.
+Availability depends on kernel configuration, Bubblewrap installation, distribution mount layout, unprivileged user namespace policy, and delegated cgroup permissions. Cathedral checks namespace and Bubblewrap prerequisites before launch. Resource limits require the requested controller files to be writable in the configured delegated cgroup subtree.
 
 ## Windows
 
