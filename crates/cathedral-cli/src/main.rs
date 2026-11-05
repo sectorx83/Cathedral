@@ -144,6 +144,7 @@ fn main() -> Result<()> {
             let record = records.last().ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
             println!("Run: {}", record.id);
             println!("PID: {}", record.pid);
+            runner::cleanup_finished(record)?;
             println!("State: {}", runner::process_state(record).label());
             println!("Started (Unix): {}", record.started_at);
             if let Some(metrics) = runner::metrics(record)? {
@@ -174,6 +175,7 @@ fn main() -> Result<()> {
             } else {
                 println!("{:<36} {:<10} {:<10} {:>12} {:>12}", "RUN ID", "PID", "STATE", "RSS (KiB)", "READ (B)");
                 for record in records {
+                    runner::cleanup_finished(&record)?;
                     let state = runner::process_state(&record);
                     let metrics = runner::metrics(&record)?;
                     println!("{:<36} {:<10} {:<10} {:>12} {:>12}",
