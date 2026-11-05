@@ -38,6 +38,7 @@ pub enum CathedralError {
 pub type Result<T> = std::result::Result<T, CathedralError>;
 
 pub fn initialize(data_dir: &Path) -> Result<Registry> {
+    tracing::debug!(data_dir = %data_dir.display(), "initializing Cathedral storage");
     std::fs::create_dir_all(data_dir)?;
     Workspace::new(data_dir)?.initialize()?;
     Registry::open(&data_dir.join("cathedral.sqlite3"))
@@ -48,6 +49,7 @@ pub fn create_experiment(
     requested_name: &str,
     manifest: Manifest,
 ) -> Result<Experiment> {
+    tracing::debug!(experiment = requested_name, "creating experiment");
     manifest.validate()?;
     if manifest.experiment.name != requested_name {
         return Err(CathedralError::Manifest(format!(
@@ -109,6 +111,7 @@ pub fn list_experiments(data_dir: &Path) -> Result<Vec<Experiment>> {
 }
 
 pub fn delete_experiment(data_dir: &Path, name: &str) -> Result<()> {
+    tracing::debug!(experiment = name, "deleting experiment");
     let registry = initialize(data_dir)?;
     let experiment = registry
         .get_by_name(name)?
