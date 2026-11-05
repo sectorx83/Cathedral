@@ -875,8 +875,12 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn bubblewrap_works() -> bool {
         Command::new("bwrap").args([
-            "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
-            "--proc", "/proc", "--dev", "/dev", "--", "/usr/bin/true"
+            "--unshare-all", "--new-session", "--die-with-parent",
+            "--ro-bind", "/usr", "/usr",
+            "--dir", "/etc", "--ro-bind-try", "/etc/passwd", "/etc/passwd",
+            "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+            "--clearenv", "--setenv", "PATH", "/usr/bin:/bin",
+            "--", "/usr/bin/true"
         ]).status().is_ok_and(|status| status.success())
     }
 
