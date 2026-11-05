@@ -2,7 +2,7 @@
 
 ## Project status
 
-The Phase 1 Rust workspace and initial CLI are now present. The project is still early-stage; runtime isolation, observability, snapshots, reproduction, and Studio are not implemented.
+Phase 1 Foundation & Core Engine is complete. Its Rust workspace, CLI, registry, manifest validation, workspace manager, and diagnostics passed the Linux, Windows, and macOS CI matrix. Runtime isolation, observability, snapshots, reproduction, and Studio are not implemented yet. See [CI_STATUS.md](CI_STATUS.md) for the verified source commit and run.
 
 ## Toolchain
 
@@ -34,7 +34,7 @@ cargo run -p cathedral -- create demo-lab
 cargo run -p cathedral -- list
 cargo run -p cathedral -- inspect demo-lab
 cargo run -p cathedral -- doctor
-RUST_LOG=cathedral=debug cargo run -p cathedral -- doctor
+RUST_LOG=cathedral_core=debug,cathedral=debug cargo run -p cathedral -- doctor
 cargo run -p cathedral -- delete demo-lab
 ```
 
