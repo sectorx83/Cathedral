@@ -602,9 +602,27 @@ mod tests {
 
     #[test]
     fn run_ids_are_restricted_to_safe_directory_names() {
-        assert!(run_directory(Path::new("/tmp/lab"), "abc-123").is_err());
-        assert!(run_directory(Path::new("/tmp/lab"), "../outside").is_err());
-        assert!(run_directory(Path::new("/tmp/lab"), "").is_err());
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("runs");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(root.join("abc-123")).unwrap();
+        assert!(run_directory(&root, "abc-123").is_ok());
+        assert!(run_directory(&root, "../outside").is_err());
+        assert!(run_directory(&root, "").is_err());
+    }
+
+    #[test]
+    fn rejects_symlinked_run_metadata_roots() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let temp = tempfile::tempdir().unwrap();
+            let outside = temp.path().join("outside");
+            fs::create_dir(&outside).unwrap();
+            let link = temp.path().join("linked-runs");
+            symlink(&outside, &link).unwrap();
+            assert!(list_runs(&link).is_err());
+        }
     }
 
     #[test]
