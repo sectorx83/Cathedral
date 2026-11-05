@@ -102,8 +102,13 @@ mod tests {
     fn validates_only_direct_child_workspaces() {
         let temp = tempfile::tempdir().unwrap();
         let workspace = Workspace::new(temp.path()).unwrap();
-        let path = workspace.create("01234567-89ab-cdef-0123-456789abcdef").unwrap();
-        assert_eq!(workspace.validate(&path).unwrap(), path.canonicalize().unwrap());
+        let path = workspace
+            .create("01234567-89ab-cdef-0123-456789abcdef")
+            .unwrap();
+        assert_eq!(
+            workspace.validate(&path).unwrap(),
+            path.canonicalize().unwrap()
+        );
 
         let nested = path.join("nested");
         std::fs::create_dir(&nested).unwrap();

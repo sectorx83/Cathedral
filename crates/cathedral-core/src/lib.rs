@@ -129,8 +129,8 @@ mod tests {
     #[test]
     fn create_rejects_duplicate_names_without_leaving_extra_workspaces() {
         let temp = tempdir().unwrap();
-        let first = create_experiment(temp.path(), "repeat-lab", Manifest::minimal("repeat-lab"))
-            .unwrap();
+        let first =
+            create_experiment(temp.path(), "repeat-lab", Manifest::minimal("repeat-lab")).unwrap();
         assert!(matches!(
             create_experiment(temp.path(), "repeat-lab", Manifest::minimal("repeat-lab")),
             Err(CathedralError::AlreadyExists(_))
