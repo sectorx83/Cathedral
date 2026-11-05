@@ -87,6 +87,38 @@ impl Workspace {
         Ok(canonical)
     }
 
+    /// Remove a workspace if it exists. This supports resuming a deletion
+    /// after a crash between filesystem removal and registry cleanup.
+    pub fn remove_if_exists(&self, path: &Path) -> Result<bool> {
+        self.initialize()?;
+        let root = self.root.canonicalize()?;
+        if !path.is_absolute() {
+            return Err(CathedralError::UnsafePath(path.to_path_buf()));
+        }
+        let parent = path
+            .parent()
+            .ok_or_else(|| CathedralError::UnsafePath(path.to_path_buf()))?
+            .canonicalize()?;
+        if parent != root || path.file_name().is_none() {
+            return Err(CathedralError::UnsafePath(path.to_path_buf()));
+        }
+
+        let metadata = match std::fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(CathedralError::UnsafePath(path.to_path_buf()));
+        }
+        let canonical = path.canonicalize()?;
+        if canonical.parent() != Some(root.as_path()) {
+            return Err(CathedralError::UnsafePath(canonical));
+        }
+        std::fs::remove_dir_all(canonical)?;
+        Ok(true)
+    }
+
     pub fn remove(&self, path: &Path) -> Result<()> {
         let canonical = self.validate(path)?;
         std::fs::remove_dir_all(canonical)?;
