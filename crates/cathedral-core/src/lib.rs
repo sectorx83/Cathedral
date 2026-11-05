@@ -23,6 +23,10 @@ pub enum CathedralError {
     NotFound(String),
     #[error("manifest error: {0}")]
     Manifest(String),
+    #[error("registry schema error: {0}")]
+    RegistrySchema(String),
+    #[error("registry integrity check failed: {0}")]
+    RegistryIntegrity(String),
     #[error("unsafe workspace path: {0}")]
     UnsafePath(PathBuf),
     #[error(transparent)]
@@ -69,15 +73,28 @@ pub fn create_experiment(
         manifest_version: manifest.manifest_version,
     };
 
-    if let Err(error) = registry.insert(&experiment) {
-        let _ = workspace.remove(&path);
-        return Err(error);
-    }
+    // Write the manifest before registering the experiment. If persistence
+    // fails, the registry never exposes a partially initialized experiment.
     if let Err(error) = manifest.write_to(&path.join("cathedral.toml")) {
-        let _ = registry.delete_by_id(&experiment.id);
-        let _ = workspace.remove(&path);
-        return Err(error);
+        let cleanup = workspace.remove(&path);
+        return match cleanup {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(CathedralError::Manifest(format!(
+                "{error}; workspace cleanup also failed: {cleanup_error}"
+            ))),
+        };
     }
+
+    if let Err(error) = registry.insert(&experiment) {
+        let cleanup = workspace.remove(&path);
+        return match cleanup {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(CathedralError::Manifest(format!(
+                "{error}; workspace cleanup also failed: {cleanup_error}"
+            ))),
+        };
+    }
+
     Ok(experiment)
 }
 
@@ -96,7 +113,50 @@ pub fn delete_experiment(data_dir: &Path, name: &str) -> Result<()> {
     let experiment = registry
         .get_by_name(name)?
         .ok_or_else(|| CathedralError::NotFound(name.to_owned()))?;
+
+    // Validate the recorded path before deleting anything from disk. The
+    // workspace manager only permits a direct child of its managed root.
     Workspace::new(data_dir)?.remove(Path::new(&experiment.workspace_path))?;
     registry.delete_by_id(&experiment.id)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn create_rejects_duplicate_names_without_leaving_extra_workspaces() {
+        let temp = tempdir().unwrap();
+        let first = create_experiment(temp.path(), "repeat-lab", Manifest::minimal("repeat-lab"))
+            .unwrap();
+        assert!(matches!(
+            create_experiment(temp.path(), "repeat-lab", Manifest::minimal("repeat-lab")),
+            Err(CathedralError::AlreadyExists(_))
+        ));
+        let items = list_experiments(temp.path()).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, first.id);
+        assert_eq!(
+            std::fs::read_dir(temp.path().join("experiments"))
+                .unwrap()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn delete_refuses_a_missing_workspace_without_dropping_registry_entry() {
+        let temp = tempdir().unwrap();
+        let item = create_experiment(temp.path(), "missing-lab", Manifest::minimal("missing-lab"))
+            .unwrap();
+        std::fs::remove_dir_all(&item.workspace_path).unwrap();
+
+        assert!(delete_experiment(temp.path(), "missing-lab").is_err());
+        assert_eq!(
+            inspect_experiment(temp.path(), "missing-lab").unwrap().id,
+            item.id
+        );
+    }
 }
