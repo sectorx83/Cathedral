@@ -857,7 +857,7 @@ fn wait_for_workload_pid(supervisor_pid: u32) -> Option<u32> {
             if let Some(pid) = nested.split_whitespace().next().and_then(|value| value.parse().ok()) { return Some(pid); }
             if proc_start_ticks(bwrap_pid).is_none() { return Some(bwrap_pid); }
         }
-        if proc_start_ticks(supervisor_pid).is_none() { return None; }
+        proc_start_ticks(supervisor_pid)?;
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     None
