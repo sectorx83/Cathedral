@@ -857,6 +857,13 @@ fn now_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    fn bubblewrap_works() -> bool {
+        Command::new("bwrap").args([
+            "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
+            "--proc", "/proc", "--dev", "/dev", "--", "/usr/bin/true"
+        ]).status().is_ok_and(|status| status.success())
+    }
 
     #[test]
     fn run_ids_are_restricted_to_safe_directory_names() {
@@ -959,9 +966,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn sandbox_exposes_only_workspace_and_private_tmp() {
-        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success()) {
-            return;
-        }
+        if !bubblewrap_works() { return; }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         fs::create_dir(&workspace).unwrap();
