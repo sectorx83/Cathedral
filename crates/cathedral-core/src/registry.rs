@@ -1,11 +1,11 @@
 //! SQLite-backed local experiment registry.
 
+use crate::{CathedralError, Result};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
-use rusqlite::{params, Connection, OptionalExtension};
-use crate::{CathedralError, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Experiment {
@@ -45,11 +45,10 @@ impl Registry {
              CREATE INDEX IF NOT EXISTS idx_experiments_created_at
                  ON experiments(created_at);",
         )?;
-        let version: i64 = connection.query_row(
-            "SELECT version FROM schema_version LIMIT 1",
-            [],
-            |row| row.get(0),
-        )?;
+        let version: i64 =
+            connection.query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })?;
         if version != 1 {
             return Err(CathedralError::Manifest(format!(
                 "unsupported registry schema version {version}"
@@ -59,37 +58,42 @@ impl Registry {
     }
 
     pub fn insert(&self, item: &Experiment) -> Result<()> {
-        self.connection.execute(
-            "INSERT INTO experiments
+        self.connection
+            .execute(
+                "INSERT INTO experiments
              (id, name, description, workspace_path, created_at, manifest_version)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                item.id,
-                item.name,
-                item.description,
-                item.workspace_path,
-                item.created_at,
-                item.manifest_version
-            ],
-        ).map_err(|error| {
-            if matches!(&error, rusqlite::Error::SqliteFailure(code, _)
+                params![
+                    item.id,
+                    item.name,
+                    item.description,
+                    item.workspace_path,
+                    item.created_at,
+                    item.manifest_version
+                ],
+            )
+            .map_err(|error| {
+                if matches!(&error, rusqlite::Error::SqliteFailure(code, _)
                 if code.code == rusqlite::ErrorCode::ConstraintViolation)
-            {
-                CathedralError::AlreadyExists(item.name.clone())
-            } else {
-                CathedralError::Sqlite(error)
-            }
-        })?;
+                {
+                    CathedralError::AlreadyExists(item.name.clone())
+                } else {
+                    CathedralError::Sqlite(error)
+                }
+            })?;
         Ok(())
     }
 
     pub fn get_by_name(&self, name: &str) -> Result<Option<Experiment>> {
-        self.connection.query_row(
-            "SELECT id, name, description, workspace_path, created_at, manifest_version
+        self.connection
+            .query_row(
+                "SELECT id, name, description, workspace_path, created_at, manifest_version
              FROM experiments WHERE name = ?1",
-            [name],
-            row_to_experiment,
-        ).optional().map_err(Into::into)
+                [name],
+                row_to_experiment,
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     pub fn list(&self) -> Result<Vec<Experiment>> {
@@ -106,7 +110,8 @@ impl Registry {
     }
 
     pub fn delete_by_id(&self, id: &str) -> Result<()> {
-        self.connection.execute("DELETE FROM experiments WHERE id = ?1", [id])?;
+        self.connection
+            .execute("DELETE FROM experiments WHERE id = ?1", [id])?;
         Ok(())
     }
 }

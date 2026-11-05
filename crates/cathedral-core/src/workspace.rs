@@ -1,7 +1,7 @@
 //! Safe management of Cathedral-owned experiment directories.
 
-use std::path::{Component, Path, PathBuf};
 use crate::{CathedralError, Result};
+use std::path::{Component, Path, PathBuf};
 
 pub struct Workspace {
     root: PathBuf,
@@ -11,7 +11,9 @@ impl Workspace {
     pub fn new(data_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(data_dir)?;
         let canonical_data = data_dir.canonicalize()?;
-        Ok(Self { root: canonical_data.join("experiments") })
+        Ok(Self {
+            root: canonical_data.join("experiments"),
+        })
     }
 
     pub fn initialize(&self) -> Result<()> {
@@ -21,7 +23,9 @@ impl Workspace {
 
     pub fn create(&self, id: &str) -> Result<PathBuf> {
         if id.is_empty()
-            || !id.bytes().all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+            || !id
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
         {
             return Err(CathedralError::UnsafePath(PathBuf::from(id)));
         }
@@ -44,7 +48,9 @@ impl Workspace {
         if canonical == root
             || !canonical.starts_with(&root)
             || canonical.parent() != Some(root.as_path())
-            || canonical.components().any(|part| matches!(part, Component::ParentDir))
+            || canonical
+                .components()
+                .any(|part| matches!(part, Component::ParentDir))
         {
             return Err(CathedralError::UnsafePath(canonical));
         }

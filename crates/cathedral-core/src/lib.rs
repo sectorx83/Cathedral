@@ -122,7 +122,10 @@ mod tests {
         let created = create_experiment(temp.path(), "sample-lab", manifest("sample-lab")).unwrap();
         assert_eq!(created.name, "sample-lab");
         assert_eq!(list_experiments(temp.path()).unwrap().len(), 1);
-        assert_eq!(inspect_experiment(temp.path(), "sample-lab").unwrap().id, created.id);
+        assert_eq!(
+            inspect_experiment(temp.path(), "sample-lab").unwrap().id,
+            created.id
+        );
         delete_experiment(temp.path(), "sample-lab").unwrap();
         assert!(list_experiments(temp.path()).unwrap().is_empty());
     }

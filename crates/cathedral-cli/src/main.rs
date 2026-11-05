@@ -1,10 +1,10 @@
-use std::path::PathBuf;
 use anyhow::{Context, Result};
 use cathedral_core::{
     create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
     manifest::Manifest,
 };
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "cathedral", version, about = "The Open Computing Laboratory")]

@@ -1,8 +1,8 @@
 //! Versioned experiment manifest parsing and validation.
 
-use std::{collections::BTreeMap, fs, path::Path};
-use serde::{Deserialize, Serialize};
 use crate::{CathedralError, Result};
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, fs, path::Path};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -43,8 +43,8 @@ impl Manifest {
     }
 
     pub fn parse(input: &str) -> Result<Self> {
-        let manifest: Self = toml::from_str(input)
-            .map_err(|error| CathedralError::Manifest(error.to_string()))?;
+        let manifest: Self =
+            toml::from_str(input).map_err(|error| CathedralError::Manifest(error.to_string()))?;
         manifest.validate()?;
         Ok(manifest)
     }
@@ -78,7 +78,10 @@ impl Manifest {
             if path.is_empty()
                 || relative.is_absolute()
                 || relative.components().any(|part| {
-                    matches!(part, std::path::Component::ParentDir | std::path::Component::RootDir)
+                    matches!(
+                        part,
+                        std::path::Component::ParentDir | std::path::Component::RootDir
+                    )
                 })
             {
                 return Err(CathedralError::Manifest(format!(
@@ -88,7 +91,9 @@ impl Manifest {
         }
         for key in self.environment.variables.keys() {
             let mut chars = key.chars();
-            let first_valid = chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+            let first_valid = chars
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
             if !first_valid || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
                 return Err(CathedralError::Manifest(format!(
                     "invalid environment variable name '{key}'"
@@ -104,11 +109,10 @@ pub fn validate_name(name: &str) -> Result<()> {
     let valid = !bytes.is_empty()
         && bytes.len() <= 48
         && bytes[0].is_ascii_lowercase()
-        && (bytes[bytes.len() - 1].is_ascii_lowercase()
-            || bytes[bytes.len() - 1].is_ascii_digit())
-        && bytes.iter().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-'
-        });
+        && (bytes[bytes.len() - 1].is_ascii_lowercase() || bytes[bytes.len() - 1].is_ascii_digit())
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-');
     if !valid {
         return Err(CathedralError::InvalidName(name.to_owned()));
     }
@@ -131,7 +135,8 @@ mod tests {
     fn rejects_unknown_fields_and_versions() {
         assert!(Manifest::parse(
             "manifest_version = 1\n[experiment]\nname = \"demo\"\nunknown = \"nope\""
-        ).is_err());
+        )
+        .is_err());
         let unsupported = Manifest {
             manifest_version: 99,
             ..Manifest::minimal("demo")
