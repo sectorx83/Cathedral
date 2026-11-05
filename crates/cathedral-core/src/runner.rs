@@ -458,7 +458,7 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
         || limits.pids_max.is_some();
     let configured_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT");
     if !has_limits && configured_root.is_none() {
-        Ok(None);
+        return Ok(None);
     }
     #[cfg(not(target_os = "linux"))]
     {
