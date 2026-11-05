@@ -7,12 +7,14 @@
 use crate::{manifest::Manifest, CathedralError, Result};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(target_os = "linux")]
+use std::{fs::File, io::Read, process::Command};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunRecord {
@@ -162,6 +164,7 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
             "--proc", "/proc",
             "--dev", "/dev",
             "--tmpfs", "/tmp",
+            "--dir", "/workspace",
             "--bind",
         ])
         .arg(&canonical_workspace)
@@ -171,7 +174,7 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
         .args(["--setenv", "HOME", "/workspace"])
         .args(["--setenv", "TMPDIR", "/tmp"]);
         for (key, value) in &manifest.environment.variables {
-            child.args(["--setenv", key, value]);
+            child.arg("--setenv").arg(key).arg(value);
         }
         let relative = canonical_workdir.strip_prefix(&canonical_workspace)
             .map_err(|_| CathedralError::Manifest("working directory escaped workspace".to_owned()))?;
@@ -180,7 +183,7 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
         } else {
             format!("/workspace/{}", relative.to_string_lossy())
         };
-        child.args(["--chdir", &sandbox_workdir, "--"]);
+        child.arg("--chdir").arg(&sandbox_workdir).arg("--");
         child.args(command);
         child.stdin(Stdio::null()).stdout(Stdio::from(log)).stderr(Stdio::from(stderr));
         #[cfg(unix)]
