@@ -284,6 +284,7 @@ fn main() -> Result<()> {
             let runtime = cathedral_core::runtime::RuntimeProbe::inspect();
             println!("Runtime host prerequisites:");
             println!("  bubblewrap: {}", runtime.bubblewrap.label());
+            println!("  Bubblewrap namespaces: {}", runtime.bubblewrap_namespaces.label());
             println!("  unshare utility: {}", runtime.unshare_binary.label());
             println!(
                 "  user/PID/mount namespaces: {}",
@@ -299,9 +300,7 @@ fn main() -> Result<()> {
                 "  cgroup memory controller: {}",
                 runtime.memory_controller.label()
             );
-            let namespace_ready = runtime.bubblewrap == cathedral_core::runtime::ProbeStatus::Available
-                && runtime.user_pid_mount_namespaces == cathedral_core::runtime::ProbeStatus::Available
-                && runtime.network_namespace == cathedral_core::runtime::ProbeStatus::Available;
+            let namespace_ready = runtime.bubblewrap_namespaces == cathedral_core::runtime::ProbeStatus::Available;
             println!("Linux isolation prerequisites: {}", if namespace_ready { "available" } else { "incomplete" });
             let cgroup_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT").map(PathBuf::from);
             let cgroup_root_status = cgroup_root.as_ref().map(|path| {
