@@ -63,15 +63,58 @@ impl ProcessState {
     }
 }
 
-fn runs_root(workspace: &Path) -> PathBuf {
-    workspace.join(".cathedral").join("runs")
+fn ensure_real_directory(path: &Path) -> Result<PathBuf> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(CathedralError::UnsafePath(path.to_path_buf()));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            match fs::create_dir(path) {
+                Ok(()) => {}
+                Err(create_error) if create_error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(create_error) => return Err(create_error.into()),
+            }
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(CathedralError::UnsafePath(path.to_path_buf()));
+    }
+    Ok(path.canonicalize()?)
 }
 
-fn run_directory(workspace: &Path, id: &str) -> Result<PathBuf> {
+fn ensure_run_root(run_root: &Path) -> Result<PathBuf> {
+    let runs_parent = run_root.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
+    let data_root = runs_parent.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
+    let canonical_data = data_root.canonicalize()?;
+    let canonical_runs = ensure_real_directory(runs_parent)?;
+    if canonical_runs.parent() != Some(canonical_data.as_path()) {
+        return Err(CathedralError::UnsafePath(canonical_runs));
+    }
+    let canonical_root = ensure_real_directory(run_root)?;
+    if canonical_root.parent() != Some(canonical_runs.as_path()) {
+        return Err(CathedralError::UnsafePath(canonical_root));
+    }
+    Ok(canonical_root)
+}
+
+fn run_directory(run_root: &Path, id: &str) -> Result<PathBuf> {
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
         return Err(CathedralError::Manifest("invalid run identifier".to_owned()));
     }
-    Ok(runs_root(workspace).join(id))
+    let root_metadata = fs::symlink_metadata(run_root)?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        return Err(CathedralError::UnsafePath(run_root.to_path_buf()));
+    }
+    let root = run_root.canonicalize()?;
+    let path = root.join(id);
+    let metadata = fs::symlink_metadata(&path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() || path.canonicalize()?.parent() != Some(root.as_path()) {
+        return Err(CathedralError::UnsafePath(path));
+    }
+    Ok(path)
 }
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -100,8 +143,8 @@ fn read_record(path: &Path) -> Result<RunRecord> {
         .map_err(|error| CathedralError::Manifest(format!("invalid run metadata: {error}")))
 }
 
-pub fn list_runs(workspace: &Path) -> Result<Vec<RunRecord>> {
-    let root = runs_root(workspace);
+pub fn list_runs(run_root: &Path) -> Result<Vec<RunRecord>> {
+    let root = run_root.to_path_buf();
     if !root.exists() {
         return Ok(Vec::new());
     }
@@ -113,21 +156,25 @@ pub fn list_runs(workspace: &Path) -> Result<Vec<RunRecord>> {
             continue;
         }
         let record_path = entry.path().join("run.json");
-        if record_path.is_file() {
+        if let Ok(file_metadata) = fs::symlink_metadata(&record_path) {
+            if file_metadata.file_type().is_symlink() || !file_metadata.is_file() {
+                return Err(CathedralError::UnsafePath(record_path));
+            }
             records.push(read_record(&record_path)?);
+            }
         }
     }
     records.sort_by_key(|record| record.started_at);
     Ok(records)
 }
 
-pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
+pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<RunRecord> {
     if command.is_empty() || command[0].trim().is_empty() {
         return Err(CathedralError::Manifest("a non-empty command is required".to_owned()));
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (workspace, command);
+        let _ = (workspace, run_root, command);
         return Err(CathedralError::Manifest(
             "isolated workload execution is currently supported on Linux only".to_owned(),
         ));
@@ -155,9 +202,10 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
             return Err(CathedralError::Manifest("working directory resolves outside the experiment workspace".to_owned()));
         }
 
+        let canonical_run_root = ensure_run_root(run_root)?;
         let id = uuid::Uuid::new_v4().to_string();
-        let directory = run_directory(&canonical_workspace, &id)?;
-        fs::create_dir_all(&directory)?;
+        let directory = canonical_run_root.join(&id);
+        fs::create_dir(&directory)?;
         let log_path = directory.join("combined.log");
         let log = File::create(&log_path)?;
         let stderr = log.try_clone()?;
@@ -344,15 +392,15 @@ pub fn cleanup_finished(record: &RunRecord) -> Result<()> {
     }
     Ok(())
 }
-pub fn stop(workspace: &Path, run_id: &str) -> Result<()> {
+pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (workspace, run_id);
+        let _ = (run_root, run_id);
         return Err(CathedralError::Manifest("process control is currently supported on Linux only".to_owned()));
     }
     #[cfg(target_os = "linux")]
     {
-        let record = read_record(&run_directory(workspace, run_id)?.join("run.json"))?;
+        let record = read_record(&run_directory(run_root, run_id)?.join("run.json"))?;
         match process_state(&record) {
             ProcessState::Finished => return Ok(()),
             ProcessState::ProcessIdentityChanged => {
@@ -383,9 +431,16 @@ pub fn stop(workspace: &Path, run_id: &str) -> Result<()> {
     }
 }
 
-pub fn logs(workspace: &Path, run_id: &str) -> Result<String> {
-    let record = read_record(&run_directory(workspace, run_id)?.join("run.json"))?;
-    Ok(fs::read_to_string(record.log_file)?)
+pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
+    let directory = run_directory(run_root, run_id)?;
+    let record = read_record(&directory.join("run.json"))?;
+    let log_path = directory.join("combined.log");
+    let metadata = fs::symlink_metadata(&log_path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(CathedralError::UnsafePath(log_path));
+    }
+    let _ = record;
+    Ok(fs::read_to_string(log_path)?)
 }
 
 pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
@@ -538,7 +593,7 @@ mod tests {
 
     #[test]
     fn run_ids_are_restricted_to_safe_directory_names() {
-        assert!(run_directory(Path::new("/tmp/lab"), "abc-123").is_ok());
+        assert!(run_directory(Path::new("/tmp/lab"), "abc-123").is_err());
         assert!(run_directory(Path::new("/tmp/lab"), "../outside").is_err());
         assert!(run_directory(Path::new("/tmp/lab"), "").is_err());
     }
@@ -564,10 +619,12 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path();
         Manifest::minimal("runtime-test").write_to(&workspace.join("cathedral.toml")).unwrap();
-        let record = launch(workspace, &["/usr/bin/printf".to_owned(), "cathedral-runtime-ok".to_owned()]).unwrap();
+        let run_root = temp.path().join("data").join("runs").join("runtime-test");
+        fs::create_dir_all(run_root.parent().unwrap()).unwrap();
+        let record = launch(workspace, &run_root, &["/usr/bin/printf".to_owned(), "cathedral-runtime-ok".to_owned()]).unwrap();
         let mut output = String::new();
         for _ in 0..100 {
-            output = logs(workspace, &record.id).unwrap();
+            output = logs(&run_root, &record.id).unwrap();
             if output.contains("cathedral-runtime-ok") { break; }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -592,6 +649,6 @@ mod tests {
     }
     #[test]
     fn empty_command_is_rejected_before_platform_dispatch() {
-        assert!(launch(Path::new("/tmp"), &[]).is_err());
+        assert!(launch(Path::new("/tmp"), Path::new("/tmp/data/runs/test"), &[]).is_err());
     }
 }
