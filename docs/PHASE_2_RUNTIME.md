@@ -55,7 +55,7 @@ are sampled from procfs.
 - `stop` sends termination to the run's cgroup when available, otherwise to
   the workload process group.
 - Samples requested through `monitor` or `processes` are appended to
-  `.cathedral/runs/<run-id>/metrics.jsonl`.
+  `runs/<experiment-id>/<run-id>/metrics.jsonl` under Cathedral's data directory, outside the writable experiment workspace.
 
 The current CLI samples on demand. It does not provide a streaming dashboard,
 automatic periodic history collection, disk-space quotas, or network traffic
