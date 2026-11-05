@@ -264,6 +264,7 @@ fn main() -> Result<()> {
             println!("Host architecture: {}", host.architecture);
             let runtime = cathedral_core::runtime::RuntimeProbe::inspect();
             println!("Runtime host prerequisites:");
+            println!("  bubblewrap: {}", runtime.bubblewrap.label());
             println!("  unshare utility: {}", runtime.unshare_binary.label());
             println!(
                 "  user/PID/mount namespaces: {}",
