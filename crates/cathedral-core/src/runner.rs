@@ -567,8 +567,11 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
     #[cfg(target_os = "linux")]
     {
         let pids: Vec<u32> = if let Some(path) = &record.cgroup_path {
-            fs::read_to_string(PathBuf::from(path).join("cgroup.procs"))?
-                .lines().filter_map(|line| line.trim().parse().ok()).collect()
+            match fs::read_to_string(PathBuf::from(path).join("cgroup.procs")) {
+                Ok(contents) => contents.lines().filter_map(|line| line.trim().parse().ok()).collect(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(error) => return Err(error.into()),
+            }
         } else {
             let root_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
             process_tree_pids(root_pid)?
