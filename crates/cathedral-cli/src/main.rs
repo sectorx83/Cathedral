@@ -154,6 +154,15 @@ fn main() -> Result<()> {
                 println!("Resident memory: {} KiB", metrics.resident_memory_kb);
                 println!("CPU time: {} ticks (user), {} ticks (system)", metrics.user_cpu_ticks, metrics.system_cpu_ticks);
                 println!("Disk I/O: {} bytes read, {} bytes written", metrics.read_bytes, metrics.write_bytes);
+                if let Some(value) = metrics.cgroup_memory_current_bytes {
+                    println!("Cgroup memory: {} bytes", value);
+                }
+                if let Some(value) = metrics.cgroup_cpu_usage_usec {
+                    println!("Cgroup CPU time: {} microseconds", value);
+                }
+                if let Some(value) = metrics.cgroup_process_count {
+                    println!("Cgroup processes: {}", value);
+                }
             } else {
                 println!("Process metrics: unavailable (process exited or identity changed)");
             }
