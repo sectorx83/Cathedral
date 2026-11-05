@@ -138,6 +138,10 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn read_record(path: &Path) -> Result<RunRecord> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(CathedralError::UnsafePath(path.to_path_buf()));
+    }
     let bytes = fs::read(path)?;
     serde_json::from_slice(&bytes)
         .map_err(|error| CathedralError::Manifest(format!("invalid run metadata: {error}")))
@@ -145,8 +149,13 @@ fn read_record(path: &Path) -> Result<RunRecord> {
 
 pub fn list_runs(run_root: &Path) -> Result<Vec<RunRecord>> {
     let root = run_root.to_path_buf();
-    if !root.exists() {
-        return Ok(Vec::new());
+    match fs::symlink_metadata(&root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(CathedralError::UnsafePath(root));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
     }
     let mut records = Vec::new();
     for entry in fs::read_dir(root)? {
@@ -433,7 +442,7 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
 
 pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     let directory = run_directory(run_root, run_id)?;
-    let record = read_record(&directory.join("run.json"))?;
+    let _record = read_record(&directory.join("run.json"))?;
     let log_path = directory.join("combined.log");
     let metadata = fs::symlink_metadata(&log_path)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
