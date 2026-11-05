@@ -856,6 +856,71 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn sandbox_exposes_only_workspace_and_private_tmp() {
+        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success()) {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        Manifest::minimal("filesystem-test").write_to(&workspace.join("cathedral.toml")).unwrap();
+        let run_root = temp.path().join("data").join("runs").join("filesystem-test");
+        fs::create_dir_all(run_root.parent().unwrap()).unwrap();
+        let command = [
+            "/usr/bin/sh".to_owned(),
+            "-c".to_owned(),
+            "test ! -e /etc/shadow && test ! -e /root && test -w /workspace && test -w /tmp && printf isolated > /workspace/sandbox-proof".to_owned(),
+        ];
+        let record = launch(&workspace, &run_root, &command).unwrap();
+        for _ in 0..200 {
+            if exit_status(&record).is_some() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(exit_status(&record), Some(0));
+        assert_eq!(fs::read_to_string(workspace.join("sandbox-proof")).unwrap(), "isolated");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn refuses_symlinked_working_directory() {
+        use std::os::unix::fs::symlink;
+        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success()) {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&workspace).unwrap();
+        fs::create_dir(&outside).unwrap();
+        symlink(&outside, workspace.join("linked")).unwrap();
+        let mut manifest = Manifest::minimal("symlink-test");
+        manifest.environment.working_directory = Some("linked".to_owned());
+        manifest.write_to(&workspace.join("cathedral.toml")).unwrap();
+        let run_root = temp.path().join("data").join("runs").join("symlink-test");
+        fs::create_dir_all(run_root.parent().unwrap()).unwrap();
+        assert!(launch(&workspace, &run_root, &["/usr/bin/true".to_owned()]).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn stop_terminates_a_running_workload() {
+        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success()) {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        Manifest::minimal("stop-test").write_to(&workspace.join("cathedral.toml")).unwrap();
+        let run_root = temp.path().join("data").join("runs").join("stop-test");
+        fs::create_dir_all(run_root.parent().unwrap()).unwrap();
+        let record = launch(&workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        assert_eq!(process_state(&record), ProcessState::Running);
+        stop(&run_root, &record.id).unwrap();
+        assert_eq!(process_state(&record), ProcessState::Finished);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn refuses_to_stop_a_reused_process_identifier() {
         let record = RunRecord {
             id: "test-run".to_owned(),
