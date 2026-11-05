@@ -566,6 +566,9 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
     }
     #[cfg(target_os = "linux")]
     {
+        if record.cgroup_path.is_none() && process_state(record) == ProcessState::ProcessIdentityChanged {
+            return Ok(Vec::new());
+        }
         let pids: Vec<u32> = if let Some(path) = &record.cgroup_path {
             match fs::read_to_string(PathBuf::from(path).join("cgroup.procs")) {
                 Ok(contents) => contents.lines().filter_map(|line| line.trim().parse().ok()).collect(),
@@ -578,6 +581,7 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
         };
         let mut result = Vec::new();
         for pid in pids {
+            if matches!(proc_state(pid), Some('Z' | 'X')) { continue; }
             let mut process_record = record.clone();
             process_record.pid = pid;
             process_record.process_start_ticks = proc_start_ticks(pid).unwrap_or(0);
