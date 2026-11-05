@@ -3,6 +3,7 @@
 //! These checks are diagnostic only. They do not start workloads, create a
 //! sandbox, or prove that a future runtime configuration will be enforceable.
 
+#[cfg(target_os = "linux")]
 use std::{fs, process::Command};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
