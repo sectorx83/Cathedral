@@ -24,6 +24,8 @@ pub struct RunRecord {
     pub started_at: u64,
     pub command: Vec<String>,
     pub log_file: String,
+    #[serde(default)]
+    pub cgroup_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,6 +157,7 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
         let log = File::create(&log_path)?;
         let stderr = log.try_clone()?;
 
+        let cgroup_path = prepare_cgroup(&manifest)?;
         let mut child = Command::new("bwrap");
         child.args([
             "--unshare-all",
@@ -188,12 +191,42 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
         child.stdin(Stdio::null()).stdout(Stdio::from(log)).stderr(Stdio::from(stderr));
         #[cfg(unix)]
         {
-            use std::os::unix::process::CommandExt;
+            use std::os::unix::{ffi::OsStrExt, process::CommandExt};
             child.process_group(0);
+            if let Some(path) = &cgroup_path {
+                let control_file = std::ffi::CString::new(path.join("cgroup.procs").as_os_str().as_bytes())
+                    .map_err(|_| CathedralError::Manifest("cgroup path contains a null byte".to_owned()))?;
+                unsafe {
+                    child.pre_exec(move || {
+                        let fd = libc::open(control_file.as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC);
+                        if fd < 0 { return Err(std::io::Error::last_os_error()); }
+                        let mut buffer = [0u8; 20];
+                        let mut value = libc::getpid() as u32;
+                        let mut cursor = buffer.len();
+                        if value == 0 { cursor -= 1; buffer[cursor] = b'0'; }
+                        while value > 0 {
+                            cursor -= 1;
+                            buffer[cursor] = b'0' + (value % 10) as u8;
+                            value /= 10;
+                        }
+                        let length = buffer.len() - cursor;
+                        let written = libc::write(fd, buffer[cursor..].as_ptr().cast(), length);
+                        let close_result = libc::close(fd);
+                        if written != length as isize || close_result != 0 {
+                            return Err(std::io::Error::last_os_error());
+                        }
+                        Ok(())
+                    });
+                }
+            }
         }
-        let process = child.spawn().map_err(|error| {
-            CathedralError::Manifest(format!("failed to start isolated workload: {error}"))
-        })?;
+        let process = match child.spawn() {
+            Ok(process) => process,
+            Err(error) => {
+                if let Some(path) = &cgroup_path { let _ = fs::remove_dir(path); }
+                return Err(CathedralError::Manifest(format!("failed to start isolated workload: {error}")));
+            }
+        };
         let pid = process.id();
         // The child is intentionally detached. Its log and identity metadata
         // allow another Cathedral invocation to inspect or terminate it.
@@ -206,6 +239,7 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
             started_at: now_seconds(),
             command: command.to_vec(),
             log_file: log_path.to_string_lossy().into_owned(),
+            cgroup_path: cgroup_path.map(|path| path.to_string_lossy().into_owned()),
         };
         let encoded = serde_json::to_vec_pretty(&record)
             .map_err(|error| CathedralError::Manifest(error.to_string()))?;
@@ -214,6 +248,41 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
     }
 }
 
+fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
+    let limits = &manifest.resources;
+    if limits.memory_max_bytes.is_none() && limits.cpu_quota_percent.is_none() && limits.pids_max.is_none() {
+        return Ok(None);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err(CathedralError::Manifest("hard resource limits currently require Linux cgroup v2".to_owned()));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let configured = std::env::var_os("CATHEDRAL_CGROUP_ROOT").ok_or_else(|| CathedralError::Manifest(
+            "resource limits were requested but CATHEDRAL_CGROUP_ROOT is not configured to a delegated cgroup v2 directory".to_owned()))?;
+        let root = PathBuf::from(configured).canonicalize()?;
+        if !root.join("cgroup.controllers").is_file() || !root.join("cgroup.procs").is_file() {
+            return Err(CathedralError::Manifest("CATHEDRAL_CGROUP_ROOT is not a cgroup v2 directory".to_owned()));
+        }
+        let path = root.join(format!("cathedral-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&path)?;
+        let configured_limits = (|| -> Result<()> {
+            if let Some(value) = limits.memory_max_bytes { fs::write(path.join("memory.max"), value.to_string())?; }
+            if let Some(value) = limits.cpu_quota_percent {
+                let quota = u64::from(value) * 1000;
+                fs::write(path.join("cpu.max"), format!("{quota} 100000"))?;
+            }
+            if let Some(value) = limits.pids_max { fs::write(path.join("pids.max"), value.to_string())?; }
+            Ok(())
+        })();
+        if let Err(error) = configured_limits {
+            let _ = fs::remove_dir(&path);
+            return Err(CathedralError::Manifest(format!("could not enforce requested cgroup v2 limits: {error}")));
+        }
+        Ok(Some(path))
+    }
+}
 pub fn process_state(record: &RunRecord) -> ProcessState {
     #[cfg(target_os = "linux")]
     {
@@ -232,6 +301,17 @@ pub fn process_state(record: &RunRecord) -> ProcessState {
     }
 }
 
+pub fn cleanup_finished(record: &RunRecord) -> Result<()> {
+    if process_state(record) != ProcessState::Finished { return Ok(()); }
+    if let Some(path) = &record.cgroup_path {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            fs::remove_dir(path).map_err(|error| CathedralError::Manifest(format!(
+                "workload exited but cgroup cleanup failed; remaining processes may still exist: {error}")))?;
+        }
+    }
+    Ok(())
+}
 pub fn stop(workspace: &Path, run_id: &str) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
