@@ -402,6 +402,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
 
 #[cfg(target_os = "linux")]
 fn spawn_cgroup_reaper(path: &Path, supervisor_pid: u32, start_ticks: u64) -> Result<()> {
+    use std::os::unix::process::CommandExt;
     if start_ticks == 0 { return Ok(()); }
     let script = r#"
 pid="$1"
@@ -515,9 +516,27 @@ pub fn cleanup_finished(record: &RunRecord) -> Result<()> {
     if process_state(record) != ProcessState::Finished { return Ok(()); }
     if let Some(path) = &record.cgroup_path {
         let path = PathBuf::from(path);
-        if path.exists() && fs::read_to_string(path.join("cgroup.procs")).unwrap_or_default().trim().is_empty() {
-            fs::remove_dir(path).map_err(|error| CathedralError::Manifest(format!(
-                "workload exited but cgroup cleanup failed; remaining processes may still exist: {error}")))?;
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(CathedralError::UnsafePath(path));
+        }
+        let members = match fs::read_to_string(path.join("cgroup.procs")) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        if members.trim().is_empty() {
+            match fs::remove_dir(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(CathedralError::Manifest(format!(
+                    "workload exited but cgroup cleanup failed; remaining processes may still exist: {error}"
+                ))),
+            }
         }
     }
     Ok(())
