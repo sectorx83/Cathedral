@@ -365,6 +365,13 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let supervisor_pid = process.id();
         let pid = wait_for_workload_pid(supervisor_pid).unwrap_or(supervisor_pid);
         let supervisor_start_ticks = proc_start_ticks(supervisor_pid).unwrap_or(0);
+        if let Some(path) = &cgroup_path {
+            if let Err(error) = spawn_cgroup_reaper(path, supervisor_pid, supervisor_start_ticks) {
+                let _ = fs::write(path.join("cgroup.kill"), "1");
+                let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
+                return Err(error);
+            }
+        }
         drop(process);
         let start_ticks = proc_start_ticks(pid).unwrap_or(0);
         let record = RunRecord {
@@ -393,6 +400,44 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
     }
 }
 
+#[cfg(target_os = "linux")]
+fn spawn_cgroup_reaper(path: &Path, supervisor_pid: u32, start_ticks: u64) -> Result<()> {
+    if start_ticks == 0 { return Ok(()); }
+    let script = r#"
+pid="$1"
+expected="$2"
+cgroup="$3"
+while [ -r "/proc/$pid/stat" ]; do
+    actual=$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')
+    [ "$actual" = "$expected" ] || break
+    sleep 0.1
+done
+[ -d "$cgroup" ] || exit 0
+count=0
+while [ -r "$cgroup/cgroup.procs" ] && [ -n "$(cat "$cgroup/cgroup.procs")" ] && [ "$count" -lt 50 ]; do
+    if [ -w "$cgroup/cgroup.kill" ]; then printf '1' > "$cgroup/cgroup.kill" 2>/dev/null || true; fi
+    sleep 0.1
+    count=$((count + 1))
+done
+if [ -r "$cgroup/cgroup.procs" ] && [ -z "$(cat "$cgroup/cgroup.procs")" ]; then
+    rmdir "$cgroup" 2>/dev/null || true
+fi
+"#;
+    Command::new("/bin/sh")
+        .args(["-c", script, "cathedral-cgroup-reaper"])
+        .arg(supervisor_pid.to_string())
+        .arg(start_ticks.to_string())
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| CathedralError::Manifest(format!(
+            "workload started, but automatic cgroup cleanup helper could not start: {error}"
+        )))
+}
 fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
     let limits = &manifest.resources;
     let has_limits = limits.memory_max_bytes.is_some()
