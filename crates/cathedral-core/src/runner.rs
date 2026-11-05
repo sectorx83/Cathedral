@@ -10,11 +10,10 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    process::Stdio,
     time::{SystemTime, UNIX_EPOCH},
 };
 #[cfg(target_os = "linux")]
-use std::{fs::File, io::Read, process::Command};
+use std::{fs::File, io::Read, process::{Command, Stdio}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunRecord {
