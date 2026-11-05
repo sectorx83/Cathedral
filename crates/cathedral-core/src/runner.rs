@@ -498,22 +498,34 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
             return Err(CathedralError::Manifest("cannot verify workload PID identity; refusing to signal a possibly reused PID".to_owned()));
         }
         if let Some(path) = &record.cgroup_path {
-            let kill_file = PathBuf::from(path).join("cgroup.kill");
-            if kill_file.is_file() {
-                fs::write(kill_file, "1")?;
-                if !record.exit_status_file.is_empty() {
-                    let _ = fs::write(&record.exit_status_file, "signal:SIGTERM\n");
-                }
-                for _ in 0..100 {
-                    let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
-                    if members.trim().is_empty() {
-                        let _ = fs::remove_dir(path);
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                return Ok(());
+            let cgroup = PathBuf::from(path);
+            let metadata = fs::symlink_metadata(&cgroup)?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(CathedralError::UnsafePath(cgroup));
             }
+            let kill_file = cgroup.join("cgroup.kill");
+            if !kill_file.is_file() {
+                return Err(CathedralError::Manifest(
+                    "this cgroup v2 kernel lacks cgroup.kill; refusing an incomplete process-tree stop".to_owned()
+                ));
+            }
+            fs::write(&kill_file, "1")?;
+            if !record.exit_status_file.is_empty() {
+                let _ = fs::write(&record.exit_status_file, "signal:SIGKILL\n");
+            }
+            for _ in 0..500 {
+                let members = fs::read_to_string(cgroup.join("cgroup.procs"))?;
+                if members.trim().is_empty() {
+                    fs::remove_dir(&cgroup).map_err(|error| CathedralError::Manifest(format!(
+                        "workload stopped but its cgroup could not be removed: {error}"
+                    )))?;
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            return Err(CathedralError::Manifest(
+                "cgroup.kill was requested but processes remained after five seconds".to_owned()
+            ));
         }
         let supervisor_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
         let status = Command::new("kill")
@@ -525,7 +537,31 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
         if !record.exit_status_file.is_empty() {
             let _ = fs::write(&record.exit_status_file, "signal:SIGTERM\n");
         }
-        Ok(())
+        for _ in 0..100 {
+            match process_state(&record) {
+                ProcessState::Finished => return Ok(()),
+                ProcessState::ProcessIdentityChanged => {
+                    return Err(CathedralError::Manifest("workload PID identity changed while stopping".to_owned()));
+                }
+                ProcessState::Running => std::thread::sleep(std::time::Duration::from_millis(50)),
+            }
+        }
+        let status = Command::new("kill")
+            .args(["-KILL", "--", &format!("-{supervisor_pid}")])
+            .status()?;
+        if !status.success() {
+            return Err(CathedralError::Manifest("workload did not stop after SIGTERM and SIGKILL failed".to_owned()));
+        }
+        for _ in 0..100 {
+            match process_state(&record) {
+                ProcessState::Finished => return Ok(()),
+                ProcessState::ProcessIdentityChanged => {
+                    return Err(CathedralError::Manifest("workload PID identity changed while stopping".to_owned()));
+                }
+                ProcessState::Running => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        }
+        Err(CathedralError::Manifest("workload process group remained after SIGKILL".to_owned()))
     }
 }
 
