@@ -43,7 +43,7 @@ RUST_LOG=cathedral_core=debug,cathedral=debug cargo run -p cathedral -- doctor
 cargo run -p cathedral -- delete demo-lab
 ```
 
-Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data directory. Linux workload execution requires Bubblewrap and working unprivileged user namespaces. Set `CATHEDRAL_CGROUP_ROOT` to a delegated cgroup v2 directory to enable resource controls and aggregate process metrics. Resource limits in a manifest fail closed if the delegated controllers are unavailable.
+Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data directory. Linux workload execution requires Bubblewrap and working unprivileged user namespaces. Set `CATHEDRAL_CGROUP_ROOT` to a delegated cgroup v2 directory to enable resource controls and aggregate process metrics. Resource limits in a manifest fail closed if the delegated controllers are unavailable. `timeout_seconds` requires GNU coreutils `timeout` and is enforced by the host-side supervisor.
 
 ## Engineering principles
 
