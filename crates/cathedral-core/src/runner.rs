@@ -163,6 +163,10 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
             "--unshare-all",
             "--new-session",
             "--ro-bind", "/usr", "/usr",
+            "--symlink", "usr/bin", "/bin",
+            "--symlink", "usr/sbin", "/sbin",
+            "--symlink", "usr/lib", "/lib",
+            "--symlink", "usr/lib64", "/lib64",
             "--ro-bind", "/etc", "/etc",
             "--proc", "/proc",
             "--dev", "/dev",
@@ -327,6 +331,13 @@ pub fn stop(workspace: &Path, run_id: &str) -> Result<()> {
                 return Err(CathedralError::Manifest("refusing to signal a reused PID".to_owned()));
             }
             ProcessState::Running => {}
+        }
+        if let Some(path) = &record.cgroup_path {
+            let kill_file = PathBuf::from(path).join("cgroup.kill");
+            if kill_file.is_file() {
+                fs::write(kill_file, "1")?;
+                return Ok(());
+            }
         }
         let status = Command::new("kill")
             .args(["-TERM", "--", &format!("-{}", record.pid)])
