@@ -67,7 +67,11 @@ impl Workspace {
     pub fn validate(&self, path: &Path) -> Result<PathBuf> {
         self.initialize()?;
         let root = self.root.canonicalize()?;
-        if !path.is_absolute() {
+        if !path.is_absolute()
+            || path
+                .components()
+                .any(|part| matches!(part, Component::ParentDir))
+        {
             return Err(CathedralError::UnsafePath(path.to_path_buf()));
         }
         let metadata = std::fs::symlink_metadata(path)?;
@@ -92,7 +96,11 @@ impl Workspace {
     pub fn remove_if_exists(&self, path: &Path) -> Result<bool> {
         self.initialize()?;
         let root = self.root.canonicalize()?;
-        if !path.is_absolute() {
+        if !path.is_absolute()
+            || path
+                .components()
+                .any(|part| matches!(part, Component::ParentDir))
+        {
             return Err(CathedralError::UnsafePath(path.to_path_buf()));
         }
         let parent = path
