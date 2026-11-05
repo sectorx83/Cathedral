@@ -29,13 +29,17 @@ The initial Rust workspace currently provides:
 - A CLI named `cathedral`.
 - SQLite-backed local experiment metadata.
 - Experiment create, list, inspect, and delete operations.
-- Version-1 TOML manifest parsing and validation.
+- Version-1 TOML manifest parsing, environment validation, and declared dependency metadata (recorded only; not resolved or installed).
 - Managed experiment workspace directories.
-- Basic path and symlink checks for managed workspace deletion.
+- Managed workspace path validation and symlink checks for validation and deletion.
+- Atomic manifest writes and rollback-safe experiment creation.
+- Registry schema validation, legacy marker migration, and SQLite integrity checks.
+- A diagnostic `cathedral doctor` command that checks registry integrity and registered workspace/manifest consistency.
+- Structured tracing controlled by `RUST_LOG`.
 - Host data-directory selection with a `CATHEDRAL_HOME` override.
 - A cross-platform CI matrix for Linux, Windows, and macOS.
 
-These features are early foundation work. The project still needs additional error-recovery, registry migration, platform, and integration testing before Phase 1 is complete.
+Phase 1 now includes transactional registry initialization with legacy schema-marker migration, SQLite integrity checks, atomic manifest persistence, validated dependency metadata, managed-path consistency checks in `cathedral doctor`, structured tracing, and expanded lifecycle failure tests. Runtime execution and isolation remain Phase 2 work.
 
 ## Build from source
 
@@ -54,7 +58,7 @@ cargo run -p cathedral -- init
 cargo run -p cathedral -- create hello-lab
 cargo run -p cathedral -- list
 cargo run -p cathedral -- inspect hello-lab
-cargo run -p cathedral -- doctor
+RUST_LOG=cathedral=debug cargo run -p cathedral -- doctor
 cargo run -p cathedral -- delete hello-lab
 ```
 
