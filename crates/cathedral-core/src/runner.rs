@@ -388,6 +388,38 @@ pub fn logs(workspace: &Path, run_id: &str) -> Result<String> {
     Ok(fs::read_to_string(record.log_file)?)
 }
 
+pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = record;
+        return Err(CathedralError::Manifest("process inspection is currently supported on Linux only".to_owned()));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let pids: Vec<u32> = if let Some(path) = &record.cgroup_path {
+            fs::read_to_string(PathBuf::from(path).join("cgroup.procs"))?
+                .lines().filter_map(|line| line.trim().parse().ok()).collect()
+        } else {
+            let mut found = Vec::new();
+            for entry in fs::read_dir("/proc")? {
+                let entry = entry?;
+                let Some(pid) = entry.file_name().to_str().and_then(|value| value.parse::<u32>().ok()) else { continue; };
+                if proc_process_group(pid) == Some(record.pid) { found.push(pid); }
+            }
+            found
+        };
+        let mut result = Vec::new();
+        for pid in pids {
+            let mut process_record = record.clone();
+            process_record.pid = pid;
+            process_record.process_start_ticks = proc_start_ticks(pid).unwrap_or(0);
+            process_record.cgroup_path = None;
+            if let Some(snapshot) = metrics(&process_record)? { result.push(snapshot); }
+        }
+        result.sort_by_key(|item| item.pid);
+        Ok(result)
+    }
+}
 pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -470,6 +502,12 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn proc_process_group(pid: u32) -> Option<u32> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let (_, rest) = stat.rsplit_once(") ")?;
+    rest.split_whitespace().nth(2)?.parse().ok()
+}
 #[cfg(target_os = "linux")]
 fn wait_for_workload_pid(supervisor_pid: u32) -> Option<u32> {
     for _ in 0..100 {
