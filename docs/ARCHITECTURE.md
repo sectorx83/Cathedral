@@ -39,7 +39,7 @@ The CLI is the Phase 1 interface. It parses arguments, loads configuration, invo
 
 SQLite stores local metadata such as experiment IDs, names, paths, timestamps, and manifest versions. Filesystem contents remain in managed workspaces rather than being stored in the database.
 
-The registry uses SQLite's transactional `user_version` marker, migrates the original one-row schema marker without discarding experiment records, validates required columns, and exposes SQLite integrity checks. Experiment names have a unique constraint. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories. Manifest persistence uses a temporary sibling file followed by rename, avoiding partially written manifests.
+The registry uses SQLite's transactional `user_version` marker, migrates the original one-row schema marker without discarding experiment records, validates required columns, and exposes SQLite integrity checks. Experiment names have a unique constraint. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories. Manifest persistence uses a temporary sibling file followed by rename, avoiding partially written manifests. The \\`cathedral doctor\\` command verifies registry integrity, each registered workspace and manifest, and detects unregistered workspace directories.
 
 ### Runtime and platform backends
 
