@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phase 1 Foundation & Core Engine is complete and verified on Linux, Windows, and macOS. Runtime isolation, live observability, snapshots, reproduction, and desktop Studio remain future phases.
+> **Project status:** Phase 1 is complete. Phase 2 now has a Linux Bubblewrap execution backend, optional cgroup v2 resource enforcement, process controls, captured logs, and resource sampling. Windows and macOS execution backends are not implemented. Phase 3 and Phase 4 remain future work.
 
 ## What Cathedral is
 
@@ -25,7 +25,7 @@ The intended workflow is:
 5. Capture a checkpoint and export the experiment.
 6. Recreate it on another compatible machine and inspect any differences.
 
-## Current Phase 1 implementation
+## Implemented foundation
 
 The completed Phase 1 Rust foundation provides:
 
@@ -42,7 +42,25 @@ The completed Phase 1 Rust foundation provides:
 - Host data-directory selection with a `CATHEDRAL_HOME` override.
 - A cross-platform CI matrix for Linux, Windows, and macOS.
 
-Phase 1 deliberately stops at experiment management and platform contracts. It does not execute workloads or claim to isolate untrusted code.
+## Phase 2 Linux runtime
+
+On Linux, Cathedral can launch a command through Bubblewrap with user, PID, IPC, UTS, and network namespaces. The sandbox exposes the experiment workspace as writable, system binaries and configuration as read-only, and a temporary filesystem at `/tmp`. The host environment is cleared; only a small default environment and manifest-declared variables are passed in.
+
+The CLI provides:
+
+```sh
+cathedral run hello-lab -- /usr/bin/python3 app.py
+cathedral monitor hello-lab
+cathedral processes hello-lab
+cathedral logs hello-lab
+cathedral stop hello-lab <run-id>
+```
+
+Install Bubblewrap and ensure unprivileged user namespaces are permitted. `cathedral doctor` checks the host prerequisites. Workloads have no network access by default.
+
+Optional hard resource limits are declared in `cathedral.toml` and enforced through a user-delegated cgroup v2 subtree. Set `CATHEDRAL_CGROUP_ROOT` to that delegated directory. Cathedral refuses to start when a requested limit cannot be installed. The limits are not silently downgraded.
+
+Linux namespaces and cgroups are container-style containment, not a virtual machine or a security guarantee against kernel vulnerabilities. Do not use this early runtime for hostile code requiring a hardened boundary. Windows and macOS currently provide experiment management only, not workload isolation.
 
 ## Build from source
 
@@ -92,7 +110,7 @@ serde = "^1.0"
 cargo run -p cathedral -- create hello-lab --manifest ./cathedral.toml
 ```
 
-Manifest values are configuration data. Declared dependency requirements are recorded as metadata only. Phase 1 does not resolve or install dependencies, execute commands, or launch workloads.
+Manifest values are configuration data. Declared dependency requirements are recorded as metadata only and are not resolved or installed. Resource limits are optional and require a delegated cgroup v2 root on Linux.
 
 ## Design principles
 
@@ -122,17 +140,11 @@ The project is organized into four phases:
 
 See [ROADMAP.md](ROADMAP.md) for scope and completion criteria.
 
-## Planned CLI beyond Phase 1
+## Planned CLI beyond Phase 2
 
-The following commands are planned for later phases and are **not available yet**:
+Snapshots and reproduction are **not available yet**:
 
 ```text
-cathedral run my-experiment
-cathedral monitor my-experiment
-cathedral logs my-experiment
-cathedral processes my-experiment
-cathedral stop my-experiment
-
 cathedral snapshot my-experiment
 cathedral snapshots my-experiment
 cathedral restore my-experiment <snapshot>
@@ -156,11 +168,11 @@ cathedral reproduce experiment.cath
 
 The core and CLI use Rust. SQLite stores local metadata. A Tauri + React + TypeScript desktop application is planned for the final phase. A local API is expected to use Axum with WebSockets where streaming updates are needed.
 
-Linux isolation is expected to build on namespaces, cgroups v2, and filesystem layering. Windows and macOS will use their own native isolation mechanisms. These are design choices under evaluation and will be validated during implementation.
+The Linux runtime currently uses Bubblewrap namespaces and a restricted mount view, with optional cgroup v2 resource controls. Windows and macOS native isolation backends remain future work.
 
 ## Security expectations
 
-Experiments may contain untrusted code. The current Phase 1 implementation does not execute workloads and is not a sandbox. Containers alone will not be described as a complete security boundary for arbitrary hostile workloads.
+Experiments may contain untrusted code. The Linux runtime is an early container-style isolation layer, not a VM or a hardened security boundary for arbitrary hostile workloads. Do not run untrusted code that requires strong containment.
 
 ## License
 
