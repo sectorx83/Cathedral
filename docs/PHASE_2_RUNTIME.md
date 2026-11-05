@@ -9,7 +9,7 @@ writable experiment workspace, and a private temporary filesystem. The inherited
 host environment is cleared; `PATH`, `HOME`, `TMPDIR`, and explicitly declared
 manifest variables are passed to the workload.
 
-Network access is disabled by default. Network access is disabled for every run. This release does not offer a network allowlist or an opt-in host-network mode; network-dependent workloads must use another explicitly documented setup outside the sandbox.
+Network access is disabled for every run. This release does not offer a network allowlist or an opt-in host-network mode; network-dependent workloads must use another explicitly documented setup outside the sandbox.
 
 Bubblewrap must be installed and the host must permit the namespace operations.
 `cathedral doctor` reports the relevant prerequisites. Launch fails if
