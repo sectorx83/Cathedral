@@ -467,6 +467,12 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
         }
         let path = root.join(format!("cathedral-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&path)?;
+        if !path.join("cgroup.kill").is_file() {
+            let _ = fs::remove_dir(&path);
+            return Err(CathedralError::Manifest(
+                "delegated cgroup v2 subtree must provide cgroup.kill (Linux 5.14 or newer) for reliable process-tree cleanup".to_owned()
+            ));
+        }
         let configured_limits = (|| -> Result<()> {
             if let Some(value) = limits.memory_max_bytes { fs::write(path.join("memory.max"), value.to_string())?; }
             if let Some(value) = limits.cpu_quota_percent {
