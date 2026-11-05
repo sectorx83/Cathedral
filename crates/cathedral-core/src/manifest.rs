@@ -2,7 +2,12 @@
 
 use crate::{CathedralError, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::Path,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -53,11 +58,39 @@ impl Manifest {
         Self::parse(&fs::read_to_string(path)?)
     }
 
+    /// Persist a complete manifest using a temporary sibling file and rename,
+    /// so a process interruption cannot leave a partially written TOML file.
     pub fn write_to(&self, path: &Path) -> Result<()> {
+        self.validate()?;
         let encoded = toml::to_string_pretty(self)
             .map_err(|error| CathedralError::Manifest(error.to_string()))?;
-        fs::write(path, encoded)?;
-        Ok(())
+        let parent = path.parent().ok_or_else(|| {
+            CathedralError::Manifest("manifest destination has no parent directory".to_owned())
+        })?;
+        let file_name = path.file_name().ok_or_else(|| {
+            CathedralError::Manifest("manifest destination has no file name".to_owned())
+        })?;
+        let temporary = parent.join(format!(
+            ".{}.{}.tmp",
+            file_name.to_string_lossy(),
+            uuid::Uuid::new_v4()
+        ));
+
+        let write_result = (|| -> Result<()> {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)?;
+            file.write_all(encoded.as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&temporary, path)?;
+            Ok(())
+        })();
+
+        if write_result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        write_result
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -76,11 +109,12 @@ impl Manifest {
         if let Some(path) = &self.environment.working_directory {
             let relative = Path::new(path);
             if path.is_empty()
+                || path.contains('\0')
                 || relative.is_absolute()
                 || path.starts_with('/')
                 || path.contains('\\')
                 || path.contains(':')
-                || path.split('/').any(|part| part == "..")
+                || path.split('/').any(|part| part == ".." || part.is_empty())
             {
                 return Err(CathedralError::Manifest(format!(
                     "working_directory must be a portable relative path without traversal, got '{path}'"
@@ -120,6 +154,7 @@ pub fn validate_name(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn accepts_valid_manifest() {
@@ -150,7 +185,23 @@ mod tests {
         assert!(manifest.validate().is_err());
         manifest.environment.working_directory = Some("C:\\Windows".to_owned());
         assert!(manifest.validate().is_err());
+        manifest.environment.working_directory = Some("src//nested".to_owned());
+        assert!(manifest.validate().is_err());
         assert!(validate_name("../bad").is_err());
         assert!(validate_name("Uppercase").is_err());
+    }
+
+    #[test]
+    fn writes_and_reloads_manifest_atomically() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("cathedral.toml");
+        let manifest = Manifest::minimal("atomic-lab");
+        manifest.write_to(&path).unwrap();
+        assert_eq!(Manifest::load(&path).unwrap(), manifest);
+        assert_eq!(
+            std::fs::read_dir(temp.path()).unwrap().count(),
+            1,
+            "temporary file should not remain after a successful write"
+        );
     }
 }
