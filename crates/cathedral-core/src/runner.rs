@@ -489,6 +489,20 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
         Ok(Some(path))
     }
 }
+#[cfg(target_os = "linux")]
+fn cgroup_has_members(path: &Path) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => return true,
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return false,
+        Err(_) => return true,
+    }
+    match fs::read_to_string(path.join("cgroup.procs")) {
+        Ok(contents) => !contents.trim().is_empty(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => true,
+    }
+}
 pub fn process_state(record: &RunRecord) -> ProcessState {
     #[cfg(target_os = "linux")]
     {
@@ -499,16 +513,14 @@ pub fn process_state(record: &RunRecord) -> ProcessState {
             }
             if matches!(proc_state(supervisor_pid), Some('Z' | 'X')) {
                 if let Some(path) = &record.cgroup_path {
-                    let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
-                    return if members.trim().is_empty() { ProcessState::Finished } else { ProcessState::Running };
+                    return if cgroup_has_members(Path::new(path)) { ProcessState::Running } else { ProcessState::Finished };
                 }
                 return ProcessState::Finished;
             }
             return ProcessState::Running;
         }
         if let Some(path) = &record.cgroup_path {
-            let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
-            if !members.trim().is_empty() { return ProcessState::Running; }
+            if cgroup_has_members(Path::new(path)) { return ProcessState::Running; }
         }
         let group_exists = unsafe {
             libc::kill(-(supervisor_pid as i32), 0) == 0
