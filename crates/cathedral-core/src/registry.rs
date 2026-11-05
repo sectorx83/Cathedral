@@ -108,9 +108,9 @@ impl Registry {
     }
 
     pub fn integrity_check(&self) -> Result<()> {
-        let result: String =
-            self.connection
-                .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        let result: String = self
+            .connection
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
         if result != "ok" {
             return Err(CathedralError::RegistryIntegrity(result));
         }
@@ -239,8 +239,9 @@ mod tests {
         let temp = tempdir().unwrap();
         let path = temp.path().join("legacy.sqlite3");
         let connection = Connection::open(&path).unwrap();
-        connection.execute_batch(
-            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
              INSERT INTO schema_version(version) VALUES (1);
              CREATE TABLE experiments (
                  id TEXT PRIMARY KEY NOT NULL,
@@ -251,7 +252,8 @@ mod tests {
                  manifest_version INTEGER NOT NULL
              );
              INSERT INTO experiments VALUES ('id', 'legacy', '', '/tmp/legacy', 1, 1);",
-        ).unwrap();
+            )
+            .unwrap();
         drop(connection);
 
         let registry = Registry::open(&path).unwrap();
@@ -264,10 +266,12 @@ mod tests {
         let temp = tempdir().unwrap();
         let path = temp.path().join("corrupt.sqlite3");
         let connection = Connection::open(&path).unwrap();
-        connection.execute_batch(
-            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
              INSERT INTO schema_version(version) VALUES (1), (1);",
-        ).unwrap();
+            )
+            .unwrap();
         drop(connection);
 
         assert!(matches!(
@@ -281,7 +285,9 @@ mod tests {
         let temp = tempdir().unwrap();
         let path = temp.path().join("future.sqlite3");
         let connection = Connection::open(&path).unwrap();
-        connection.execute_batch("PRAGMA user_version = 99;").unwrap();
+        connection
+            .execute_batch("PRAGMA user_version = 99;")
+            .unwrap();
         drop(connection);
 
         assert!(matches!(
