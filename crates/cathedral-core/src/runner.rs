@@ -458,6 +458,10 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
     }
 }
 
+pub fn exit_status(record: &RunRecord) -> Option<i32> {
+    if record.exit_status_file.is_empty() { return None; }
+    fs::read_to_string(&record.exit_status_file).ok()?.trim().parse().ok()
+}
 pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     let directory = run_directory(run_root, run_id)?;
     let _record = read_record(&directory.join("run.json"))?;
@@ -482,13 +486,8 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
             fs::read_to_string(PathBuf::from(path).join("cgroup.procs"))?
                 .lines().filter_map(|line| line.trim().parse().ok()).collect()
         } else {
-            let mut found = Vec::new();
-            for entry in fs::read_dir("/proc")? {
-                let entry = entry?;
-                let Some(pid) = entry.file_name().to_str().and_then(|value| value.parse::<u32>().ok()) else { continue; };
-                if proc_process_group(pid) == Some(record.pid) { found.push(pid); }
-            }
-            found
+            let root_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
+            process_tree_pids(root_pid)?
         };
         let mut result = Vec::new();
         for pid in pids {
@@ -585,17 +584,37 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
 }
 
 #[cfg(target_os = "linux")]
-fn proc_process_group(pid: u32) -> Option<u32> {
+fn process_tree_pids(root_pid: u32) -> Result<Vec<u32>> {
+    let mut found = std::collections::HashSet::from([root_pid]);
+    loop {
+        let mut changed = false;
+        for entry in fs::read_dir("/proc")? {
+            let entry = entry?;
+            let Some(pid) = entry.file_name().to_str().and_then(|value| value.parse::<u32>().ok()) else { continue; };
+            if found.contains(&pid) { continue; }
+            if proc_parent_pid(pid).is_some_and(|parent| found.contains(&parent)) { found.insert(pid); changed = true; }
+        }
+        if !changed { break; }
+    }
+    let mut pids: Vec<_> = found.into_iter().collect();
+    pids.sort_unstable();
+    Ok(pids)
+}
+
+#[cfg(target_os = "linux")]
+fn proc_parent_pid(pid: u32) -> Option<u32> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let (_, rest) = stat.rsplit_once(") ")?;
-    rest.split_whitespace().nth(2)?.parse().ok()
+    rest.split_whitespace().nth(1)?.parse().ok()
 }
 #[cfg(target_os = "linux")]
 fn wait_for_workload_pid(supervisor_pid: u32) -> Option<u32> {
     for _ in 0..100 {
         let children = fs::read_to_string(format!("/proc/{supervisor_pid}/task/{supervisor_pid}/children")).ok()?;
-        if let Some(pid) = children.split_whitespace().next().and_then(|value| value.parse().ok()) {
-            return Some(pid);
+        if let Some(bwrap_pid) = children.split_whitespace().next().and_then(|value| value.parse::<u32>().ok()) {
+            let nested = fs::read_to_string(format!("/proc/{bwrap_pid}/task/{bwrap_pid}/children")).unwrap_or_default();
+            if let Some(pid) = nested.split_whitespace().next().and_then(|value| value.parse().ok()) { return Some(pid); }
+            if proc_start_ticks(bwrap_pid).is_none() { return Some(bwrap_pid); }
         }
         if proc_start_ticks(supervisor_pid).is_none() { return None; }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -674,6 +693,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert!(output.contains("cathedral-runtime-ok"), "workload output was not captured: {output}");
+        assert_eq!(exit_status(&record), Some(0));
         assert!(record.pid > 0);
     }
 
