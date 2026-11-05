@@ -68,7 +68,7 @@ impl Registry {
                         .collect::<std::result::Result<Vec<_>, _>>()?;
                     drop(statement);
 
-                    if versions != [1] {
+                    if versions.len() != 1 || versions.first() != Some(&1) {
                         return Err(CathedralError::RegistrySchema(format!(
                             "legacy schema marker is invalid or unsupported: {versions:?}"
                         )));
@@ -272,10 +272,13 @@ fn row_to_experiment(row: &rusqlite::Row<'_>) -> rusqlite::Result<Experiment> {
         "ready" => ExperimentState::Ready,
         "deleting" => ExperimentState::Deleting,
         _ => {
-            return Err(rusqlite::Error::InvalidColumnType(
+            return Err(rusqlite::Error::FromSqlConversionFailure(
                 6,
-                "state".to_owned(),
                 rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("unknown experiment state '{state}'"),
+                )),
             ));
         }
     };
