@@ -58,7 +58,7 @@ cargo run -p cathedral -- init
 cargo run -p cathedral -- create hello-lab
 cargo run -p cathedral -- list
 cargo run -p cathedral -- inspect hello-lab
-RUST_LOG=cathedral=debug cargo run -p cathedral -- doctor
+RUST_LOG=cathedral_core=debug,cathedral=debug cargo run -p cathedral -- doctor
 cargo run -p cathedral -- delete hello-lab
 ```
 
