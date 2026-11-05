@@ -136,7 +136,7 @@ fn main() -> Result<()> {
         }
         Command::Run { name, command } => {
             let item = inspect_experiment(&root, &name)?;
-            let _workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             let record = runner::launch(&workspace, &run_root, &command)?;
             println!("Started isolated run {}", record.id);
@@ -179,7 +179,7 @@ fn main() -> Result<()> {
         }
         Command::Processes { name } => {
             let item = inspect_experiment(&root, &name)?;
-            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let _workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             let records = runner::list_runs(&run_root)?;
             if records.is_empty() {
@@ -202,7 +202,7 @@ fn main() -> Result<()> {
         }
         Command::Stop { name, run_id } => {
             let item = inspect_experiment(&root, &name)?;
-            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let _workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             runner::stop(&run_root, &run_id)?;
             println!("Termination signal sent to run {run_id}");
