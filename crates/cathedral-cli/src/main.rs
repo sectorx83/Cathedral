@@ -135,7 +135,10 @@ fn main() -> Result<()> {
 
             let host = PlatformInfo::detect();
             println!("Cathedral storage: OK");
-            println!("Registry integrity: OK (schema {})", registry.schema_version()?);
+            println!(
+                "Registry integrity: OK (schema {})",
+                registry.schema_version()?
+            );
             println!("Registered experiments: {}", items.len());
             println!("Experiment workspaces checked: {}", items.len());
             println!("Host platform: {}", host.platform.label());
