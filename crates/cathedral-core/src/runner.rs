@@ -976,6 +976,10 @@ mod tests {
 
         let sleeping = launch(workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
         assert_eq!(process_state(&sleeping), ProcessState::Running);
+        assert!(metrics(&sleeping).unwrap().is_some());
+        assert!(!processes(&sleeping).unwrap().is_empty());
+        let history = PathBuf::from(&sleeping.log_file).with_file_name("metrics.jsonl");
+        assert!(fs::read_to_string(history).unwrap().contains("network_rx_bytes"));
         stop(&run_root, &sleeping.id).unwrap();
         for _ in 0..100 {
             if process_state(&sleeping) == ProcessState::Finished { break; }
