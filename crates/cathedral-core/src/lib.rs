@@ -40,8 +40,9 @@ pub type Result<T> = std::result::Result<T, CathedralError>;
 pub fn initialize(data_dir: &Path) -> Result<Registry> {
     tracing::debug!(data_dir = %data_dir.display(), "initializing Cathedral storage");
     std::fs::create_dir_all(data_dir)?;
-    Workspace::new(data_dir)?.initialize()?;
-    Registry::open(&data_dir.join("cathedral.sqlite3"))
+    let canonical_data_dir = data_dir.canonicalize()?;
+    Workspace::new(&canonical_data_dir)?.initialize()?;
+    Registry::open(&canonical_data_dir.join("cathedral.sqlite3"))
 }
 
 pub fn create_experiment(
