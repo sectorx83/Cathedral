@@ -59,7 +59,7 @@ cathedral stop hello-lab <run-id>
 
 Install Bubblewrap and ensure unprivileged user namespaces are permitted. `cathedral doctor` checks the host prerequisites. Workloads have no network access by default.
 
-Optional hard resource limits are declared in `cathedral.toml` and enforced through a user-delegated cgroup v2 subtree. The runtime records process exit codes and appends samples to `metrics.jsonl` while `monitor --watch` or `processes` is used. Set `CATHEDRAL_CGROUP_ROOT` to that delegated directory. Cathedral refuses to start when a requested limit cannot be installed. The limits are not silently downgraded.
+Optional hard resource limits are declared in `cathedral.toml` and enforced through a user-delegated cgroup v2 subtree. The runtime records process exit codes, disk I/O, shared network-namespace byte counters, and appends samples to `metrics.jsonl` while `monitor --watch` or `processes` is used. Set `CATHEDRAL_CGROUP_ROOT` to that delegated directory. Cathedral refuses to start when a requested limit cannot be installed. The limits are not silently downgraded.
 
 Linux namespaces and cgroups are container-style containment, not a virtual machine or a security guarantee against kernel vulnerabilities. Do not use this early runtime for hostile code requiring a hardened boundary. Windows and macOS currently provide experiment management only, not workload isolation.
 
