@@ -315,7 +315,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         supervisor
             .args([
                 "-c",
-                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; if [ -n \"$CATHEDRAL_CGROUP_PATH\" ]; then printf '%s\\n' \"$(sh -c 'echo $PPID')\" > \"$CATHEDRAL_CGROUP_PARENT/cgroup.procs\" 2>/dev/null || true; rmdir \"$CATHEDRAL_CGROUP_PATH\" 2>/dev/null || true; fi; exit \"$status\"",
+                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; if [ -n \"$CATHEDRAL_CGROUP_PATH\" ]; then IFS=' ' read -r supervisor_pid _ < /proc/self/stat; printf '%s\\n' \"$supervisor_pid\" > \"$CATHEDRAL_CGROUP_PARENT/cgroup.procs\" 2>/dev/null || true; rmdir \"$CATHEDRAL_CGROUP_PATH\" 2>/dev/null || true; fi; exit \"$status\"",
                 "cathedral-supervisor",
                 "bwrap",
             ])
