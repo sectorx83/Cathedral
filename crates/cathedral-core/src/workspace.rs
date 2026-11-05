@@ -228,20 +228,20 @@ mod tests {
         ));
         assert!(target.exists());
     }
-}
+    #[test]
+    fn remove_if_exists_rejects_parent_traversal() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(temp.path()).unwrap();
+        workspace.initialize().unwrap();
+        let outside = temp.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        let traversal = temp.path().join("experiments").join("..").join("outside");
 
-#[test]
-fn remove_if_exists_rejects_parent_traversal() {
-    let temp = tempfile::tempdir().unwrap();
-    let workspace = Workspace::new(temp.path()).unwrap();
-    workspace.initialize().unwrap();
-    let outside = temp.path().join("outside");
-    std::fs::create_dir(&outside).unwrap();
-    let traversal = temp.path().join("experiments").join("..").join("outside");
+        assert!(matches!(
+            workspace.remove_if_exists(&traversal),
+            Err(CathedralError::UnsafePath(_))
+        ));
+        assert!(outside.exists());
+    }
 
-    assert!(matches!(
-        workspace.remove_if_exists(&traversal),
-        Err(CathedralError::UnsafePath(_))
-    ));
-    assert!(outside.exists());
 }
