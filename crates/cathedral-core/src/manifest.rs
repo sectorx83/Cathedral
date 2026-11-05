@@ -274,11 +274,20 @@ mod tests {
     #[test]
     fn parses_optional_linux_resource_limits() {
         let manifest = Manifest::parse(
-            "manifest_version = 1\\n[experiment]\\nname = \\\"limited-lab\\\"\\n[resources]\\nmemory_max_bytes = 536870912\\ncpu_quota_percent = 150\\npids_max = 64"
-        ).unwrap();
+            r#"manifest_version = 1
+[experiment]
+name = "limited-lab"
+[resources]
+memory_max_bytes = 536870912
+cpu_quota_percent = 150
+pids_max = 64
+timeout_seconds = 3600"#
+        )
+        .unwrap();
         assert_eq!(manifest.resources.memory_max_bytes, Some(536870912));
         assert_eq!(manifest.resources.cpu_quota_percent, Some(150));
         assert_eq!(manifest.resources.pids_max, Some(64));
+        assert_eq!(manifest.resources.timeout_seconds, Some(3600));
     }
 
     #[test]
