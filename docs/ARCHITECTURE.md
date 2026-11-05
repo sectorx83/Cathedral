@@ -43,7 +43,9 @@ The registry uses SQLite's transactional `user_version` marker, migrates the ori
 
 ### Runtime and platform backends
 
-The runtime layer is future work. The platform module currently detects the host and defines a backend contract. It does not claim that a native execution backend exists.
+Phase 2 has begun with a host prerequisite probe in `cathedral-core::runtime`. On Linux it checks whether the `unshare` utility can create user/PID/mount and network namespaces for a short probe process, and inspects the cgroup v2 CPU and memory controllers. `cathedral doctor` reports these results. This is preflight diagnostics only: there is still no workload execution backend, cgroup configuration, resource enforcement, or sandbox. Windows and macOS report Linux-only prerequisites as not applicable.
+
+The platform module continues to define the shared backend contract. Native execution backends must report their actual capabilities and may not silently downgrade enforced settings.
 
 Future adapters will implement narrow interfaces for process creation, isolation, resource controls, filesystem setup, and network policy.
 
