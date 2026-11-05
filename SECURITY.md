@@ -4,6 +4,10 @@
 
 Cathedral is under active early-stage design. Its isolation and execution systems are not implemented yet. **Do not use the current repository as a sandbox for untrusted code.** No security boundary is being provided by the documentation or planned architecture alone.
 
+## Phase 1 filesystem handling
+
+Phase 1 rejects parent traversal, symlinked workspace roots, symlinked experiment entries, and workspace paths that are not direct children of Cathedral's managed root. It also checks registered manifests and reports orphaned workspaces through `cathedral doctor`. These checks protect against common mistakes and accidental path substitution, but they are not race-free against a hostile process running with the same user privileges. Phase 1 does not use OS-level directory-handle confinement and does not provide a sandbox or workload isolation.
+
 ## Threat model
 
 Cathedral is intended to manage experiments that may execute software supplied by the user or obtained from external sources. Such software may be buggy, compromised, or deliberately hostile.
