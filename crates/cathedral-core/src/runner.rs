@@ -1086,6 +1086,26 @@ mod tests {
         };
         assert_eq!(process_state(&record), ProcessState::ProcessIdentityChanged);
     }
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn unsupported_platforms_fail_closed_instead_of_running_on_host() {
+        let command = vec!["echo".to_owned(), "unsafe fallback must not happen".to_owned()];
+        assert!(launch(Path::new("."), Path::new("./runs/test"), &command).is_err());
+        assert!(stop(Path::new("."), "test-run").is_err());
+        assert!(processes(&RunRecord {
+            id: "test-run".to_owned(),
+            pid: 1,
+            supervisor_pid: 1,
+            supervisor_start_ticks: 1,
+            process_start_ticks: 1,
+            started_at: 0,
+            command,
+            timeout_seconds: None,
+            log_file: String::new(),
+            exit_status_file: String::new(),
+            cgroup_path: None,
+        }).is_err());
+    }
     #[test]
     fn empty_command_is_rejected_before_platform_dispatch() {
         assert!(launch(Path::new("/tmp"), Path::new("/tmp/data/runs/test"), &[]).is_err());
