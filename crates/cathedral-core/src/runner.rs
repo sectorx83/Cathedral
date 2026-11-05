@@ -46,6 +46,8 @@ pub struct ProcessMetrics {
     pub system_cpu_ticks: u64,
     pub read_bytes: u64,
     pub write_bytes: u64,
+    pub network_rx_bytes: u64,
+    pub network_tx_bytes: u64,
     pub cgroup_memory_current_bytes: Option<u64>,
     pub cgroup_cpu_usage_usec: Option<u64>,
     pub cgroup_process_count: Option<u64>,
@@ -691,6 +693,24 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
         Ok(result)
     }
 }
+#[cfg(target_os = "linux")]
+fn parse_network_device_bytes(contents: &str) -> (u64, u64) {
+    contents.lines().filter_map(|line| {
+        let (_, counters) = line.split_once(':')?;
+        let fields: Vec<_> = counters.split_whitespace().collect();
+        if fields.len() < 9 { return None; }
+        Some((fields[0].parse::<u64>().ok()?, fields[8].parse::<u64>().ok()?))
+    }).fold((0u64, 0u64), |(rx, tx), (next_rx, next_tx)| {
+        (rx.saturating_add(next_rx), tx.saturating_add(next_tx))
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn proc_network_device_bytes(pid: u32) -> (u64, u64) {
+    fs::read_to_string(format!("/proc/{pid}/net/dev"))
+        .map(|contents| parse_network_device_bytes(&contents))
+        .unwrap_or_default()
+}
 pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -707,6 +727,7 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
         let status = fs::read_to_string(root.join("status"))?;
         let stat = fs::read_to_string(root.join("stat"))?;
         let io = fs::read_to_string(root.join("io")).unwrap_or_default();
+        let (network_rx_bytes, network_tx_bytes) = proc_network_device_bytes(record.pid);
         let state = stat.split_once(") ").map(|(_, rest)| rest.split_whitespace().next().unwrap_or("?").to_owned()).unwrap_or_else(|| "?".to_owned());
         let fields: Vec<&str> = stat.split_once(") ").map(|(_, rest)| rest.split_whitespace().collect()).unwrap_or_default();
         let parent_pid = fields.get(1).and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -748,6 +769,8 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
             system_cpu_ticks,
             read_bytes: io_value("read_bytes"),
             write_bytes: io_value("write_bytes"),
+            network_rx_bytes,
+            network_tx_bytes,
             cgroup_memory_current_bytes,
             cgroup_cpu_usage_usec,
             cgroup_process_count,
@@ -764,6 +787,8 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
             "system_cpu_ticks": snapshot.system_cpu_ticks,
             "read_bytes": snapshot.read_bytes,
             "write_bytes": snapshot.write_bytes,
+            "network_rx_bytes": snapshot.network_rx_bytes,
+            "network_tx_bytes": snapshot.network_tx_bytes,
             "cgroup_memory_current_bytes": snapshot.cgroup_memory_current_bytes,
             "cgroup_cpu_usage_usec": snapshot.cgroup_cpu_usage_usec,
             "cgroup_process_count": snapshot.cgroup_process_count
@@ -858,6 +883,16 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parses_network_device_byte_counters_and_sums_interfaces() {
+        let sample = r#"Inter-| Receive | Transmit
+ face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed
+  lo: 100 1 0 0 0 0 0 0 250 2 0 0 0 0 0 0
+ eth0: 300 3 0 0 0 0 0 0 450 4 0 0 0 0 0 0
+"#;
+        assert_eq!(parse_network_device_bytes(sample), (400, 700));
+    }
     #[test]
     fn process_start_time_parser_uses_proc_field_twenty_two() {
         // The helper's field selection is exercised against the current
