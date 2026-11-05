@@ -1,4 +1,7 @@
 # Cathedral
+
+[![Cathedral CI](https://github.com/sectorx83/Cathedral-/actions/workflows/ci.yml/badge.svg)](https://github.com/sectorx83/Cathedral-/actions/workflows/ci.yml)
+
 ### The Open Computing Laboratory
 
 Cathedral is an open-source developer platform for creating isolated software experiments, observing how they behave, diagnosing failures, and reproducing environments on other compatible machines.
@@ -34,7 +37,7 @@ The initial Rust workspace currently provides:
 - Managed workspace path validation and symlink checks for validation and deletion.
 - Atomic manifest writes and rollback-safe experiment creation.
 - Registry schema validation, legacy marker migration, and SQLite integrity checks.
-- A diagnostic `cathedral doctor` command that checks registry integrity and registered workspace/manifest consistency.
+- A diagnostic `cathedral doctor` command that checks registry integrity, registered workspace/manifest consistency, and orphaned workspace directories.
 - Structured tracing controlled by `RUST_LOG`.
 - Host data-directory selection with a `CATHEDRAL_HOME` override.
 - A cross-platform CI matrix for Linux, Windows, and macOS.
