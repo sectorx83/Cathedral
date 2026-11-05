@@ -1008,9 +1008,7 @@ mod tests {
     #[test]
     fn refuses_symlinked_working_directory() {
         use std::os::unix::fs::symlink;
-        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success()) {
-            return;
-        }
+        if !bubblewrap_works() { return; }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         let outside = temp.path().join("outside");
@@ -1028,9 +1026,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn stop_terminates_a_running_workload() {
-        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success()) {
-            return;
-        }
+        if !bubblewrap_works() { return; }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         fs::create_dir(&workspace).unwrap();
