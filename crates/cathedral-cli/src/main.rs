@@ -1,11 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use cathedral_core::{
     create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
-    manifest::Manifest, platform::PlatformInfo,
+    manifest::Manifest, platform::PlatformInfo, workspace::Workspace,
 };
 use clap::{Parser, Subcommand};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[command(name = "cathedral", version, about = "The Open Computing Laboratory")]
@@ -34,7 +35,7 @@ enum Command {
     Inspect { name: String },
     /// Delete an experiment and its managed workspace.
     Delete { name: String },
-    /// Check local Cathedral storage and registry health.
+    /// Check local Cathedral storage, registry, and experiment consistency.
     Doctor,
 }
 
@@ -52,6 +53,12 @@ fn data_dir(override_path: Option<PathBuf>) -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
+
     let cli = Cli::parse();
     let root = data_dir(cli.home)?;
     match cli.command {
@@ -98,13 +105,50 @@ fn main() -> Result<()> {
         }
         Command::Doctor => {
             let registry = initialize(&root)?;
+            registry.integrity_check()?;
+            let items = registry.list()?;
+            let workspace = Workspace::new(&root)?;
+            let mut issues = Vec::new();
+
+            for item in &items {
+                let path = Path::new(&item.workspace_path);
+                match workspace.validate(path) {
+                    Ok(valid_path) => match Manifest::load(&valid_path.join("cathedral.toml")) {
+                        Ok(manifest)
+                            if manifest.experiment.name == item.name
+                                && manifest.manifest_version == item.manifest_version => {}
+                        Ok(_) => issues.push(format!(
+                            "experiment '{}' has manifest metadata that does not match the registry",
+                            item.name
+                        )),
+                        Err(error) => issues.push(format!(
+                            "experiment '{}' has an unreadable or invalid manifest: {error}",
+                            item.name
+                        )),
+                    },
+                    Err(error) => issues.push(format!(
+                        "experiment '{}' has an invalid workspace: {error}",
+                        item.name
+                    )),
+                }
+            }
+
             let host = PlatformInfo::detect();
             println!("Cathedral storage: OK");
-            println!("Registry: OK");
-            println!("Registered experiments: {}", registry.list()?.len());
+            println!("Registry integrity: OK (schema {})", registry.schema_version()?);
+            println!("Registered experiments: {}", items.len());
+            println!("Experiment workspaces checked: {}", items.len());
             println!("Host platform: {}", host.platform.label());
             println!("Host architecture: {}", host.architecture);
             println!("Workload isolation: planned (Phase 2)");
+
+            if !issues.is_empty() {
+                for issue in &issues {
+                    eprintln!("Problem: {issue}");
+                }
+                bail!("doctor found {} consistency problem(s)", issues.len());
+            }
+            println!("Experiment consistency: OK");
         }
     }
     Ok(())
