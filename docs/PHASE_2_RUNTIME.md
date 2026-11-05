@@ -54,8 +54,7 @@ are sampled from procfs.
 
 The current CLI samples on demand. It does not provide a streaming dashboard,
 automatic periodic history collection, disk-space quotas, or network traffic
-accounting. Exit-code collection and automatic timeout policies are not part
-of this first runtime slice.
+accounting. Automatic timeout policies are not part of this first runtime slice.
 
 ## Platform status
 
