@@ -132,12 +132,10 @@ mod tests {
 
     #[test]
     fn rejects_unknown_fields_and_versions() {
-        assert!(
-            Manifest::parse(
-                "manifest_version = 1\n[experiment]\nname = \"demo\"\nunknown = \"nope\""
-            )
-            .is_err()
-        );
+        assert!(Manifest::parse(
+            "manifest_version = 1\n[experiment]\nname = \"demo\"\nunknown = \"nope\""
+        )
+        .is_err());
         let unsupported = Manifest {
             manifest_version: 99,
             ..Manifest::minimal("demo")

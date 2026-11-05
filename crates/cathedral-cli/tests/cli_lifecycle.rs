@@ -14,7 +14,11 @@ fn cli_can_initialize_create_inspect_list_and_delete() {
     let home = tempfile::tempdir().unwrap();
 
     let init = cathedral(home.path(), &["init"]);
-    assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
 
     let create = cathedral(home.path(), &["create", "integration-lab"]);
     assert!(

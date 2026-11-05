@@ -90,6 +90,7 @@ dependencies = [
  "cathedral-core",
  "clap",
  "dirs",
+ "tempfile",
 ]
 
 [[package]]
