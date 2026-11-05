@@ -923,6 +923,19 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn cgroup_membership_checks_are_conservative() {
+        let temp = tempfile::tempdir().unwrap();
+        let cgroup = temp.path().join("run-cgroup");
+        fs::create_dir(&cgroup).unwrap();
+        fs::write(cgroup.join("cgroup.procs"), "1234\\n").unwrap();
+        assert!(cgroup_has_members(&cgroup));
+        fs::write(cgroup.join("cgroup.procs"), "").unwrap();
+        assert!(!cgroup_has_members(&cgroup));
+        fs::remove_file(cgroup.join("cgroup.procs")).unwrap();
+        assert!(!cgroup_has_members(&cgroup));
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
     fn detached_cgroup_reaper_removes_empty_cgroup_after_supervisor_exit() {
         let temp = tempfile::tempdir().unwrap();
         let cgroup = temp.path().join("delegated-run");
