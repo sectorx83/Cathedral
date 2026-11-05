@@ -158,6 +158,7 @@ fn main() -> Result<()> {
                     println!("Memory: {} KiB RSS / {} KiB virtual", metrics.resident_memory_kb, metrics.virtual_memory_kb);
                     println!("CPU: {} user ticks / {} system ticks", metrics.user_cpu_ticks, metrics.system_cpu_ticks);
                     println!("Disk I/O: {} bytes read / {} bytes written", metrics.read_bytes, metrics.write_bytes);
+                    println!("Network namespace I/O (shared): {} bytes received / {} bytes sent", metrics.network_rx_bytes, metrics.network_tx_bytes);
                     if let Some(value) = metrics.cgroup_memory_current_bytes { println!("Cgroup memory: {} bytes", value); }
                     if let Some(value) = metrics.cgroup_cpu_usage_usec { println!("Cgroup CPU time: {} microseconds", value); }
                     if let Some(value) = metrics.cgroup_process_count { println!("Cgroup processes: {}", value); }
