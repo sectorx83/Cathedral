@@ -3,8 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use cathedral_core::{
     create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
-    manifest::Manifest,
-    platform::PlatformInfo,
+    manifest::Manifest, platform::PlatformInfo,
 };
 use clap::{Parser, Subcommand};
 
