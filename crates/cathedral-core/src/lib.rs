@@ -4,6 +4,7 @@
 pub mod manifest;
 pub mod platform;
 pub mod registry;
+pub mod runtime;
 pub mod workspace;
 
 use std::path::{Path, PathBuf};
