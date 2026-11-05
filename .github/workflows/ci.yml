@@ -28,14 +28,16 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Apply rustfmt
         run: cargo fmt --all
-      - name: Commit formatting on main
+      - name: Generate dependency lockfile
+        run: cargo generate-lockfile
+      - name: Commit generated formatting and lockfile on main
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         run: |
-          if ! git diff --quiet; then
+          if ! git diff --quiet || [ ! -f Cargo.lock ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add crates
-            git commit -m "style: apply rustfmt"
+            git add crates Cargo.lock
+            git commit -m "chore: format sources and lock dependencies"
             git push origin HEAD:main
           fi
       - name: Verify formatting

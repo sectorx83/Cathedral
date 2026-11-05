@@ -2,9 +2,9 @@
 
 ## Current status
 
-Cathedral is at the documentation and planning stage. No operating system currently has an implemented or verified runtime backend.
+Phase 1 detects the host operating system and architecture on Linux, Windows, and macOS. It provides a shared capability contract for future native runtime backends. No operating system currently has an implemented or verified workload isolation backend.
 
-Linux is the first implementation target. Windows and macOS remain first-class architectural targets, but their functionality must be delivered through native backends and tested independently.
+Linux is the first runtime implementation target. Windows and macOS remain first-class architectural targets, but their functionality must be delivered through native backends and tested independently.
 
 ## Shared contract
 
@@ -16,7 +16,7 @@ The shared core defines platform-neutral requests and results. Platform adapters
 - Required host configuration and permissions.
 - Relevant limitations and diagnostic details.
 
-The UI and CLI must display these differences clearly. They must not imply equivalent isolation simply because the same configuration field exists on each platform.
+The CLI and future Studio must display these differences clearly. They must not imply equivalent isolation simply because the same configuration field exists on each platform.
 
 ## Linux
 

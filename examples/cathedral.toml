@@ -1,0 +1,11 @@
+manifest_version = 1
+
+[experiment]
+name = "hello-lab"
+description = "A small development experiment"
+
+[environment]
+working_directory = "."
+
+[environment.variables]
+RUST_LOG = "info"

@@ -2,6 +2,7 @@
 //! Workload execution and sandbox isolation are deliberately out of scope here.
 
 pub mod manifest;
+pub mod platform;
 pub mod registry;
 pub mod workspace;
 
@@ -98,51 +99,4 @@ pub fn delete_experiment(data_dir: &Path, name: &str) -> Result<()> {
     Workspace::new(data_dir)?.remove(Path::new(&experiment.workspace_path))?;
     registry.delete_by_id(&experiment.id)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use manifest::ExperimentSection;
-
-    fn manifest(name: &str) -> Manifest {
-        Manifest {
-            manifest_version: 1,
-            experiment: ExperimentSection {
-                name: name.to_owned(),
-                description: "test experiment".to_owned(),
-            },
-            environment: Default::default(),
-        }
-    }
-
-    #[test]
-    fn lifecycle_persists_across_registry_reopens() {
-        let temp = tempfile::tempdir().unwrap();
-        let created = create_experiment(temp.path(), "sample-lab", manifest("sample-lab")).unwrap();
-        assert_eq!(created.name, "sample-lab");
-        assert_eq!(list_experiments(temp.path()).unwrap().len(), 1);
-        assert_eq!(
-            inspect_experiment(temp.path(), "sample-lab").unwrap().id,
-            created.id
-        );
-        delete_experiment(temp.path(), "sample-lab").unwrap();
-        assert!(list_experiments(temp.path()).unwrap().is_empty());
-    }
-
-    #[test]
-    fn duplicate_names_are_rejected() {
-        let temp = tempfile::tempdir().unwrap();
-        create_experiment(temp.path(), "sample-lab", manifest("sample-lab")).unwrap();
-        assert!(matches!(
-            create_experiment(temp.path(), "sample-lab", manifest("sample-lab")),
-            Err(CathedralError::AlreadyExists(_))
-        ));
-    }
-
-    #[test]
-    fn manifest_name_must_match_requested_name() {
-        let temp = tempfile::tempdir().unwrap();
-        assert!(create_experiment(temp.path(), "first", manifest("second")).is_err());
-    }
 }

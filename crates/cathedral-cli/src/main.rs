@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use cathedral_core::{
     create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
     manifest::Manifest,
+    platform::PlatformInfo,
 };
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "cathedral", version, about = "The Open Computing Laboratory")]
@@ -97,10 +99,13 @@ fn main() -> Result<()> {
         }
         Command::Doctor => {
             let registry = initialize(&root)?;
+            let host = PlatformInfo::detect();
             println!("Cathedral storage: OK");
             println!("Registry: OK");
             println!("Registered experiments: {}", registry.list()?.len());
-            println!("Execution isolation: not implemented (Phase 2)");
+            println!("Host platform: {}", host.platform.label());
+            println!("Host architecture: {}", host.architecture);
+            println!("Workload isolation: planned (Phase 2)");
         }
     }
     Ok(())
