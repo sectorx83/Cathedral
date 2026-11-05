@@ -6,14 +6,9 @@
 
 use crate::{manifest::Manifest, CathedralError, Result};
 use serde::{Deserialize, Serialize};
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::{Path, PathBuf}};
 #[cfg(target_os = "linux")]
-use std::{fs::File, io::Read, process::{Command, Stdio}};
+use std::{fs::{File, OpenOptions}, io::{Read, Write}, process::{Command, Stdio}, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunRecord {
@@ -740,7 +735,7 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = record;
-        return Ok(None);
+        Ok(None)
     }
     #[cfg(target_os = "linux")]
     {
