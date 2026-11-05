@@ -1,0 +1,16 @@
+[package]
+name = "cathedral"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "cathedral"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+cathedral-core = { path = "../cathedral-core" }
+dirs.workspace = true

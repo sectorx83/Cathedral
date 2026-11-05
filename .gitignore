@@ -1,0 +1,9 @@
+/target/
+**/*.rs.bk
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
