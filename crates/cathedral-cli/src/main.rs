@@ -214,7 +214,7 @@ fn main() -> Result<()> {
             let _workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             runner::stop(&run_root, &run_id)?;
-            println!("Termination signal sent to run {run_id}");
+            println!("Stopped run {run_id}");
         }
         Command::Doctor => {
             let registry = initialize(&root)?;
