@@ -148,6 +148,7 @@ cathedral reproduce experiment.cath
 - [Platform support](docs/PLATFORM_SUPPORT.md): cross-platform strategy and capability reporting.
 - [Experiment manifest](docs/EXPERIMENT_MANIFEST.md): version-1 `cathedral.toml` format.
 - [Development setup](docs/DEVELOPMENT.md): development workflow and quality gates.
+- [CI verification record](docs/CI_STATUS.md): latest source revision verified across Linux, Windows, and macOS.
 - [Security model](SECURITY.md): threat model, isolation boundaries, and security commitments.
 - [Contributing](CONTRIBUTING.md): contribution workflow and engineering standards.
 
