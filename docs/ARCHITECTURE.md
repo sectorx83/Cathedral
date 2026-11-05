@@ -13,7 +13,7 @@ The implemented Rust workspace contains two crates:
 - **cathedral-core:** manifest validation, experiment lifecycle services, SQLite registry, managed workspace operations, host identification, and platform capability contracts.
 - **cathedral CLI:** argument parsing and terminal presentation. It delegates domain operations to cathedral-core.
 
-The current implementation manages metadata and workspace directories. It does not execute experiments or provide workload isolation.
+The current implementation manages metadata and workspace directories, validates declared dependency metadata without resolving it, and diagnoses registry/workspace consistency. It does not execute experiments or provide workload isolation.
 
 ## 3. Architectural layers
 
@@ -39,7 +39,7 @@ The CLI is the Phase 1 interface. It parses arguments, loads configuration, invo
 
 SQLite stores local metadata such as experiment IDs, names, paths, timestamps, and manifest versions. Filesystem contents remain in managed workspaces rather than being stored in the database.
 
-The registry uses a schema-version marker and a unique constraint on experiment names. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories.
+The registry uses SQLite's transactional `user_version` marker, migrates the original one-row schema marker without discarding experiment records, validates required columns, and exposes SQLite integrity checks. Experiment names have a unique constraint. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories. Manifest persistence uses a temporary sibling file followed by rename, avoiding partially written manifests.
 
 ### Runtime and platform backends
 
