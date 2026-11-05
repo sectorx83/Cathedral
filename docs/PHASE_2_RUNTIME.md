@@ -25,9 +25,10 @@ Optional limits live in the manifest:
 memory_max_bytes = 536870912
 cpu_quota_percent = 100
 pids_max = 128
+timeout_seconds = 3600
 ```
 
-The values map to cgroup v2 `memory.max`, `cpu.max`, and `pids.max`.
+The values map to cgroup v2 `memory.max`, `cpu.max`, and `pids.max`. `timeout_seconds` uses GNU coreutils `timeout` to send `SIGTERM` at the deadline and `SIGKILL` after a five-second grace period. Valid durations are 1 second through 7 days.
 Set `CATHEDRAL_CGROUP_ROOT` to a cgroup v2 subtree delegated to the current
 user, with the relevant controllers enabled for child cgroups. For systemd
 setups, the owning user service/scope must be configured with delegation
@@ -58,7 +59,7 @@ are sampled from procfs.
 
 The current CLI samples on demand. It does not provide a streaming dashboard,
 automatic periodic history collection, disk-space quotas, or network traffic
-accounting. Automatic timeout policies are not part of this first runtime slice.
+accounting. Timeout policies are configured per experiment in the manifest; adaptive or per-command timeout profiles are not included.
 
 ## Platform status
 
