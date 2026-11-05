@@ -26,6 +26,8 @@ pub struct RunRecord {
     pub process_start_ticks: u64,
     pub started_at: u64,
     pub command: Vec<String>,
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
     pub log_file: String,
     #[serde(default)]
     pub exit_status_file: String,
@@ -250,6 +252,17 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let log = File::create(&log_path)?;
         let stderr = log.try_clone()?;
 
+        if manifest.resources.timeout_seconds.is_some() {
+            let supported = Command::new("timeout").arg("--help").output().is_ok_and(|output| {
+                String::from_utf8_lossy(&output.stdout).contains("--kill-after")
+                    || String::from_utf8_lossy(&output.stderr).contains("--kill-after")
+            });
+            if !supported {
+                return Err(CathedralError::Manifest(
+                    "this workload requests a timeout, but GNU coreutils timeout with --kill-after is unavailable".to_owned()
+                ));
+            }
+        }
         let cgroup_path = prepare_cgroup(&manifest)?;
         let mut child = Command::new("bwrap");
         child.args([
@@ -359,6 +372,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             process_start_ticks: start_ticks,
             started_at: now_seconds(),
             command: command.to_vec(),
+            timeout_seconds: manifest.resources.timeout_seconds,
             log_file: log_path.to_string_lossy().into_owned(),
             exit_status_file: status_path.to_string_lossy().into_owned(),
             cgroup_path: cgroup_path.map(|path| path.to_string_lossy().into_owned()),
@@ -783,6 +797,7 @@ mod tests {
             process_start_ticks: 0,
             started_at: 0,
             command: vec!["test".to_owned()],
+            timeout_seconds: None,
             log_file: String::new(),
             exit_status_file: String::new(),
             cgroup_path: None,
