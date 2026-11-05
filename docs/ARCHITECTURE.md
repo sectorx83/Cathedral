@@ -6,14 +6,14 @@ Cathedral is an experiment-management and reproducibility platform. Its architec
 
 The central rule is that the shared core owns the domain model and policy decisions, while platform backends own operating-system interactions. A platform backend must report what it can actually enforce.
 
-## 2. Current Phase 1 structure
+## 2. Current workspace structure
 
 The implemented Rust workspace contains two crates:
 
 - **cathedral-core:** manifest validation, experiment lifecycle services, SQLite registry, managed workspace operations, host identification, and platform capability contracts.
 - **cathedral CLI:** argument parsing and terminal presentation. It delegates domain operations to cathedral-core.
 
-The current implementation manages metadata and workspace directories, validates declared dependency metadata without resolving it, and diagnoses registry/workspace consistency. It does not execute experiments or provide workload isolation.
+The shared core and CLI now include a Linux Phase 2 runner and observatory path. Linux workload execution is delegated to Bubblewrap; run metadata and logs live under Cathedral's data directory, outside the writable experiment workspace. Windows and macOS retain Phase 1 management functionality and explicitly reject runtime execution.
 
 ## 3. Architectural layers
 
@@ -33,7 +33,7 @@ The core does not directly invoke Linux namespaces, Windows Job Objects, or macO
 
 ### CLI
 
-The CLI is the Phase 1 interface. It parses arguments, loads configuration, invokes application services, and renders stable human-readable output. CLI commands do not duplicate business rules.
+The CLI parses arguments, loads configuration, invokes application services, and renders stable human-readable output. Runtime commands delegate to the core runner and never duplicate platform policy.
 
 ### Registry and workspace manager
 
@@ -43,7 +43,7 @@ The registry uses SQLite's transactional `user_version` marker, migrates the ori
 
 ### Runtime and platform backends
 
-Phase 2 has begun with a host prerequisite probe in `cathedral-core::runtime`. On Linux it checks whether the `unshare` utility can create user/PID/mount and network namespaces for a short probe process, and inspects the cgroup v2 CPU and memory controllers. `cathedral doctor` reports these results. This is preflight diagnostics only: there is still no workload execution backend, cgroup configuration, resource enforcement, or sandbox. Windows and macOS report Linux-only prerequisites as not applicable.
+Linux Phase 2 uses Bubblewrap to create user, PID, IPC, UTS, and network namespaces with a restricted mount view. The experiment workspace is writable; system binaries and selected system configuration are read-only; `/tmp` is private; and the inherited environment is cleared. Network access is disabled by default. The runner stores metadata, logs, exit status, and resource history outside the workspace. Optional memory, CPU, and process-count limits are configured in the manifest and enforced through a delegated cgroup v2 subtree. Requested limits fail closed when controller files cannot be configured. `cathedral doctor` reports Bubblewrap, namespace, and cgroup prerequisites. Windows and macOS report Linux-only prerequisites as not applicable and do not currently implement workload execution.
 
 The platform module continues to define the shared backend contract. Native execution backends must report their actual capabilities and may not silently downgrade enforced settings.
 
@@ -59,7 +59,7 @@ The runtime must never silently downgrade an enforced security setting to an adv
 
 ### Observatory
 
-The observatory is planned for Phase 2. It will collect runtime events and measurements, including process state, resource use, logs, exit status, and failures. It should identify the source and reliability of each measurement.
+The Phase 2 CLI observatory collects process state, virtual/resident memory, CPU ticks, process I/O, cgroup memory/CPU/process counts, combined logs, and exit status. `monitor --watch` samples repeatedly; samples are appended to per-run JSONL history. Streaming dashboards, automatic timeout policies, and full disk-space/network traffic accounting remain future work.
 
 ### Snapshot and reproduction
 
