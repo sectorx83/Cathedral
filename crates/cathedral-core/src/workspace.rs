@@ -51,7 +51,9 @@ impl Workspace {
         Ok(path)
     }
 
-    pub fn remove(&self, path: &Path) -> Result<()> {
+    /// Validate that a recorded experiment path is a real directory directly
+    /// inside Cathedral's managed workspace root.
+    pub fn validate(&self, path: &Path) -> Result<PathBuf> {
         self.initialize()?;
         let root = self.root.canonicalize()?;
         if !path.is_absolute() {
@@ -71,6 +73,11 @@ impl Workspace {
         {
             return Err(CathedralError::UnsafePath(canonical));
         }
+        Ok(canonical)
+    }
+
+    pub fn remove(&self, path: &Path) -> Result<()> {
+        let canonical = self.validate(path)?;
         std::fs::remove_dir_all(canonical)?;
         Ok(())
     }
@@ -87,6 +94,21 @@ mod tests {
         workspace.initialize().unwrap();
         assert!(matches!(
             workspace.remove(temp.path()),
+            Err(CathedralError::UnsafePath(_))
+        ));
+    }
+
+    #[test]
+    fn validates_only_direct_child_workspaces() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(temp.path()).unwrap();
+        let path = workspace.create("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+        assert_eq!(workspace.validate(&path).unwrap(), path.canonicalize().unwrap());
+
+        let nested = path.join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        assert!(matches!(
+            workspace.validate(&nested),
             Err(CathedralError::UnsafePath(_))
         ));
     }
