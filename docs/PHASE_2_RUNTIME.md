@@ -1,50 +1,71 @@
-# Phase 2 Runtime Design
+# Phase 2 Runtime: Linux Implementation
 
-## First implementation slice: host preflight
+## Execution model
 
-The Phase 2 foundation begins with a read-only runtime preflight in
-`cathedral-core::runtime`. The probe reports whether the host exposes:
+The first supported backend is Linux. `cathedral run <experiment> -- <command> [args...]`
+starts the command through Bubblewrap. It uses user, PID, IPC, UTS, and network
+namespaces, a new session, a read-only system binary/configuration view, a
+writable experiment workspace, and a private temporary filesystem. The inherited
+host environment is cleared; `PATH`, `HOME`, `TMPDIR`, and explicitly declared
+manifest variables are passed to the workload.
 
-- The util-linux `unshare` utility.
-- User, PID, and mount namespace creation for the current user.
-- Network namespace creation for the current user.
-- A cgroup v2 hierarchy.
-- The cgroup v2 CPU and memory controllers.
+Network access is disabled by default. There is no network allowlist or host
+network mode in this release.
 
-On Linux, namespace checks execute a short `/bin/true` process inside the
-requested namespaces. They do not modify persistent host configuration.
-On Windows and macOS, Linux-specific prerequisites are reported as not
-applicable, not as available.
+Bubblewrap must be installed and the host must permit the namespace operations.
+`cathedral doctor` reports the relevant prerequisites. Launch fails if
+Bubblewrap is missing or cannot start the sandbox.
 
-## Capability semantics
+## Resource policy
 
-A successful preflight is evidence that a narrow host operation succeeded at
-the time of the check. It is not proof that arbitrary workloads are safely
-isolated, that a cgroup subtree can be delegated, or that resource limits can
-be applied. The current probe does not create cgroups, alter namespace policy,
-mount filesystems, or launch experiment code.
+Optional limits live in the manifest:
 
-Cathedral must keep these distinctions visible:
+```toml
+[resources]
+memory_max_bytes = 536870912
+cpu_quota_percent = 100
+pids_max = 128
+```
 
-- **Host prerequisite:** an OS feature or utility appears usable.
-- **Configured:** Cathedral has successfully prepared required runtime resources.
-- **Enforced:** the OS confirms the requested policy is active for the process tree.
-- **Observed:** a measurement was collected, with its source and sampling time.
+The values map to cgroup v2 `memory.max`, `cpu.max`, and `pids.max`.
+Set `CATHEDRAL_CGROUP_ROOT` to a cgroup v2 subtree delegated to the current
+user, with the relevant controllers enabled for child cgroups. Cathedral
+creates one child cgroup per run and attaches the Bubblewrap process before
+it executes. If a requested controller file cannot be configured, launch
+fails instead of silently dropping the limit.
 
-Only the latter two can support claims about actual runtime behavior.
+When a delegated cgroup root is configured, runs without explicit limits are
+also placed in per-run cgroups so aggregate process count, memory, and CPU
+accounting can be read. Without a delegated cgroup root, process-level metrics
+are sampled from procfs.
 
-## Next implementation work
+## Lifecycle and observability
 
-1. Define a versioned run configuration and explicit isolation modes.
-2. Implement a Linux process supervisor with process-group cleanup and persistent run metadata.
-3. Add cgroup v2 delegation checks and CPU/memory enforcement, failing closed when a requested hard limit cannot be installed.
-4. Build filesystem and network isolation around explicit mount and namespace policies.
-5. Add process, resource, and log collection with timestamps and provenance.
-6. Investigate native Windows and macOS backends independently.
+- `run` stores a run ID, process identity, command, and combined output log.
+- `monitor` reports process state, virtual/resident memory, CPU ticks, disk
+  I/O counters, and cgroup aggregate metrics when available.
+- `processes` lists recorded runs and their current resource samples.
+- `logs` reads the combined stdout/stderr log for a selected or latest run.
+- `stop` sends termination to the run's cgroup when available, otherwise to
+  the workload process group.
+- Samples requested through `monitor` or `processes` are appended to
+  `.cathedral/runs/<run-id>/metrics.jsonl`.
+
+The current CLI samples on demand. It does not provide a streaming dashboard,
+automatic periodic history collection, disk-space quotas, or network traffic
+accounting. Exit-code collection and automatic timeout policies are not part
+of this first runtime slice.
+
+## Platform status
+
+Windows and macOS continue to support the Phase 1 experiment-management
+commands, but do not yet have workload execution backends. Runtime commands
+return an explicit unsupported-platform error on those systems.
 
 ## Security boundary
 
-Linux namespaces and cgroups are useful containment mechanisms, but they are
-not a universal security boundary against hostile code. Cathedral must not
-run untrusted experiments with elevated privileges or expose the host control
-plane, registry, credentials, or home directory to experiment write access.
+This is container-style isolation, not a virtual machine. Namespaces and
+cgroups do not protect against kernel vulnerabilities, all host-kernel attack
+surfaces, or every misconfiguration. The runner is early-stage and has not
+been independently audited. Do not use it for hostile workloads requiring
+a strong security boundary. Consider a microVM/full VM backend for that use.
