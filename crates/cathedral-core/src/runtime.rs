@@ -110,8 +110,13 @@ fn inspect_linux() -> RuntimeProbe {
 #[cfg(target_os = "linux")]
 fn probe_bubblewrap() -> ProbeStatus {
     match Command::new("bwrap").args([
-        "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
-        "--proc", "/proc", "--dev", "/dev", "--", "/usr/bin/true"
+        "--unshare-all", "--new-session", "--die-with-parent",
+        "--ro-bind", "/usr", "/usr",
+        "--dir", "/etc",
+        "--ro-bind-try", "/etc/passwd", "/etc/passwd",
+        "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+        "--clearenv", "--setenv", "PATH", "/usr/bin:/bin",
+        "--", "/usr/bin/true"
     ]).output() {
         Ok(output) if output.status.success() => ProbeStatus::Available,
         Ok(_) | Err(_) => ProbeStatus::Unavailable,
