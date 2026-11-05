@@ -23,7 +23,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-The GitHub Actions workflow runs formatting, Clippy, and tests on Linux, Windows, and macOS. Core lifecycle diagnostics use structured tracing; set `RUST_LOG=cathedral=debug` to inspect debug events.
+The GitHub Actions workflow runs formatting, Clippy, and tests on Linux, Windows, and macOS. Core lifecycle diagnostics use structured tracing; set `RUST_LOG=cathedral_core=debug,cathedral=debug` to inspect debug events.
 
 ## Current CLI
 
