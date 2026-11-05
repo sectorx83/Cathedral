@@ -46,6 +46,15 @@ fn relative(s:&str)->Result<PathBuf>{
  if p.is_absolute()||p.components().any(|c|!matches!(c,Component::Normal(_))){return Err(err(format!("unsafe path '{s}'")))}
  Ok(p.to_path_buf())
 }
+fn checked_existing_path(root:&Path,value:&str)->Result<PathBuf>{
+ let mut path=root.to_path_buf();
+ for component in relative(value)?.components(){
+  path.push(component);
+  let metadata=fs::symlink_metadata(&path)?;
+  if metadata.file_type().is_symlink(){return Err(err(format!("symlinked snapshot path component: {}",path.display())))}
+ }
+ Ok(path)
+}
 fn hash(p:&Path)->Result<(u64,String)>{
  let mut f=File::open(p)?;let mut h=Sha256::new();let mut n=0u64;let mut b=[0u8;65536];
  loop{let k=f.read(&mut b)?;if k==0{break}n+=k as u64;h.update(&b[..k]);}
@@ -122,7 +131,7 @@ pub fn list(root:&Path,name:&str)->Result<Vec<Summary>>{
 pub fn verify(root:&Path,name:&str,id:&str)->Result<Summary>{
  let (dir,m)=load(root,name,id)?;let files=dir.join("files");let root_meta=fs::symlink_metadata(&files)?;
  if root_meta.file_type().is_symlink()||!root_meta.is_dir(){return Err(err("snapshot files directory is unsafe"))}
- for e in &m.entries{let p=files.join(relative(&e.path)?);let a=fs::symlink_metadata(&p)?;
+ for e in &m.entries{let p=checked_existing_path(&files,&e.path)?;let a=fs::symlink_metadata(&p)?;
   if a.file_type().is_symlink(){return Err(err(format!("symlink in snapshot: {}",e.path)))}
   match e.kind{EntryKind::Directory if a.is_dir()=>{},EntryKind::File if a.is_file()=>{let(n,h)=hash(&p)?;if n!=e.size||Some(h)!=e.sha256{return Err(err(format!("integrity failure: {}",e.path)))}}_=>return Err(err(format!("missing or wrong-type entry: {}",e.path)))}
  }validate_lockfile(&files.join("cathedral.lock"),&m)?;Ok(summary(&m))
@@ -138,7 +147,7 @@ pub fn restore(root:&Path,name:&str,id:&str)->Result<()>{
  verify(root,name,id)?;let(dir,m)=load(root,name,id)?;let exp=inspect_experiment(root,name)?;
  let target=Workspace::new(root)?.validate(Path::new(&exp.workspace_path))?;let base=root.join("experiments");
  let stage=base.join(format!(".restore-{}",Uuid::new_v4()));let backup=base.join(format!(".backup-{}",Uuid::new_v4()));fs::create_dir(&stage)?;
- let copied=(||->Result<()>{for e in &m.entries{let r=relative(&e.path)?;let s=dir.join("files").join(&r);let d=stage.join(&r);match e.kind{EntryKind::Directory=>fs::create_dir_all(d)?,EntryKind::File=>{if let Some(p)=d.parent(){fs::create_dir_all(p)?}fs::copy(s,&d)?;let(n,h)=hash(&d)?;if n!=e.size||Some(h)!=e.sha256{return Err(err(format!("file changed during restore: {}",e.path)))}}}}Ok(())})();
+ let copied=(||->Result<()>{for e in &m.entries{let r=relative(&e.path)?;let s=checked_existing_path(&dir.join("files"),&e.path)?;let d=stage.join(&r);match e.kind{EntryKind::Directory=>fs::create_dir_all(d)?,EntryKind::File=>{if let Some(p)=d.parent(){fs::create_dir_all(p)?}fs::copy(s,&d)?;let(n,h)=hash(&d)?;if n!=e.size||Some(h)!=e.sha256{return Err(err(format!("file changed during restore: {}",e.path)))}}}}Ok(())})();
  if let Err(e)=copied{let _=fs::remove_dir_all(&stage);return Err(e)}
  fs::rename(&target,&backup)?;if let Err(e)=fs::rename(&stage,&target){let rb=fs::rename(&backup,&target);let _=fs::remove_dir_all(&stage);return match rb{Ok(())=>Err(e.into()),Err(r)=>Err(err(format!("restore failed: {e}; rollback failed: {r}")))}}fs::remove_dir_all(backup)?;Ok(())
 }
@@ -177,5 +186,6 @@ mod tests{
  use super::*;use tempfile::tempdir;
  #[test]fn snapshot_verify_compare_restore(){let t=tempdir().unwrap();let e=create_experiment(t.path(),"snap-lab",Manifest::minimal("snap-lab")).unwrap();let w=Path::new(&e.workspace_path);fs::write(w.join("a.txt"),"one").unwrap();let a=create(t.path(),"snap-lab").unwrap();fs::write(w.join("a.txt"),"two").unwrap();fs::write(w.join("b.txt"),"new").unwrap();let b=create(t.path(),"snap-lab").unwrap();assert!(verify(t.path(),"snap-lab",&a.id).is_ok());let d=compare(t.path(),"snap-lab",&a.id,&b.id).unwrap();assert!(d.iter().any(|x|x.path=="a.txt"&&x.change=="changed"));assert!(d.iter().any(|x|x.path=="b.txt"&&x.change=="added"));restore(t.path(),"snap-lab",&a.id).unwrap();assert_eq!(fs::read_to_string(w.join("a.txt")).unwrap(),"one");assert!(!w.join("b.txt").exists());}
  #[test]fn package_roundtrip(){let a=tempdir().unwrap();let b=tempdir().unwrap();let e=create_experiment(a.path(),"portable-lab",Manifest::minimal("portable-lab")).unwrap();fs::write(Path::new(&e.workspace_path).join("data.txt"),"portable").unwrap();let p=a.path().join("test.cath");export(a.path(),"portable-lab",&p).unwrap();let r=import(b.path(),&p,true).unwrap();assert!(r.compatible);let x=inspect_experiment(b.path(),"portable-lab").unwrap();assert_eq!(fs::read_to_string(Path::new(&x.workspace_path).join("data.txt")).unwrap(),"portable");assert!(Path::new(&x.workspace_path).join("cathedral.lock").is_file());}
+ #[cfg(unix)]#[test]fn verify_rejects_symlinked_snapshot_parent(){use std::os::unix::fs::symlink;let t=tempdir().unwrap();let e=create_experiment(t.path(),"link-lab",Manifest::minimal("link-lab")).unwrap();let w=Path::new(&e.workspace_path);fs::create_dir(w.join("nested")).unwrap();fs::write(w.join("nested/data"),"safe").unwrap();let s=create(t.path(),"link-lab").unwrap();let files=snaproot(t.path(),&e.id).join(&s.id).join("files");fs::remove_dir_all(files.join("nested")).unwrap();let outside=t.path().join("outside");fs::create_dir(&outside).unwrap();fs::write(outside.join("data"),"external").unwrap();symlink(&outside,files.join("nested")).unwrap();assert!(verify(t.path(),"link-lab",&s.id).is_err());}
  #[test]fn detects_corruption(){let t=tempdir().unwrap();let e=create_experiment(t.path(),"hash-lab",Manifest::minimal("hash-lab")).unwrap();fs::write(Path::new(&e.workspace_path).join("x"),"good").unwrap();let s=create(t.path(),"hash-lab").unwrap();fs::write(snaproot(t.path(),&e.id).join(&s.id).join("files/x"),"bad").unwrap();assert!(verify(t.path(),"hash-lab",&s.id).is_err());}
 }
