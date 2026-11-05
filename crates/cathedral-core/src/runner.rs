@@ -488,6 +488,7 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
         let record = read_record(&run_directory(run_root, run_id)?.join("run.json"))?;
+        cleanup_finished(&record)?;
         match process_state(&record) {
             ProcessState::Finished => return Ok(()),
             ProcessState::ProcessIdentityChanged => {
