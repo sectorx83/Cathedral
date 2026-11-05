@@ -308,22 +308,17 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         child.args(command);
         let bwrap_args = child.get_args().map(|arg| arg.to_os_string()).collect::<Vec<_>>();
         let status_path = directory.join("exit-status");
-        let cgroup_path_env = cgroup_path.as_ref().map(|path| path.as_os_str().to_os_string()).unwrap_or_default();
-        let cgroup_parent_env = cgroup_path.as_ref().and_then(|path| path.parent())
-            .map(|path| path.as_os_str().to_os_string()).unwrap_or_default();
         let mut supervisor = Command::new("/bin/sh");
         supervisor
             .args([
                 "-c",
-                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; if [ -n \"$CATHEDRAL_CGROUP_PATH\" ]; then IFS=' ' read -r supervisor_pid _ < /proc/self/stat; printf '%s\\n' \"$supervisor_pid\" > \"$CATHEDRAL_CGROUP_PARENT/cgroup.procs\" 2>/dev/null || true; rmdir \"$CATHEDRAL_CGROUP_PATH\" 2>/dev/null || true; fi; exit \"$status\"",
+                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; exit \"$status\"",
                 "cathedral-supervisor",
                 "bwrap",
             ])
             .args(bwrap_args)
             .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
             .env("CATHEDRAL_TIMEOUT_SECONDS", manifest.resources.timeout_seconds.map(|value| value.to_string()).unwrap_or_default())
-            .env("CATHEDRAL_CGROUP_PATH", cgroup_path_env)
-            .env("CATHEDRAL_CGROUP_PARENT", cgroup_parent_env)
             .stdin(Stdio::null())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));
