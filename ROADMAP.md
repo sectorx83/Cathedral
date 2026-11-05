@@ -47,6 +47,8 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 2: Isolation & Observatory
 
+**Status: In progress.** The initial runtime preflight is implemented. It checks Linux namespace prerequisites and cgroup v2 controller availability, and `cathedral doctor` reports the results. Workload execution, enforced limits, and live observability are not implemented yet.
+
 **Objective:** Execute experiments under explicit, inspectable resource and isolation policies.
 
 ### Scope
