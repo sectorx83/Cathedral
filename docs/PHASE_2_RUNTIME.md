@@ -35,8 +35,10 @@ setups, the owning user service/scope must be configured with delegation
 that subtree. Do not point this variable at the global `/sys/fs/cgroup` root;
 use a subtree actually delegated to the account running Cathedral. Cathedral
 creates one child cgroup per run and attaches the Bubblewrap process before
-it executes. If a requested controller file cannot be configured, launch
-fails instead of silently dropping the limit.
+it executes. The delegated subtree must expose `cgroup.kill` (Linux 5.14 or
+newer) so stop and automatic cleanup can terminate the complete process tree.
+If a requested controller file cannot be configured, launch fails instead
+of silently dropping the limit.
 
 When a delegated cgroup root is configured, runs without explicit limits are
 also placed in per-run cgroups so aggregate process count, memory, and CPU
