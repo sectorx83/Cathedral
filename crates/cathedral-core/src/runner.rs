@@ -718,6 +718,22 @@ mod tests {
         assert!(output.contains("cathedral-runtime-ok"), "workload output was not captured: {output}");
         assert_eq!(exit_status(&record), Some(0));
         assert!(record.pid > 0);
+
+        let failing = launch(workspace, &run_root, &["/usr/bin/false".to_owned()]).unwrap();
+        for _ in 0..100 {
+            if exit_status(&failing).is_some() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(exit_status(&failing), Some(1));
+
+        let sleeping = launch(workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        assert_eq!(process_state(&sleeping), ProcessState::Running);
+        stop(&run_root, &sleeping.id).unwrap();
+        for _ in 0..100 {
+            if process_state(&sleeping) == ProcessState::Finished { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(process_state(&sleeping), ProcessState::Finished);
     }
 
     #[cfg(target_os = "linux")]
