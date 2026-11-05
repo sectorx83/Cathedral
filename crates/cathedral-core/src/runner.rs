@@ -892,6 +892,23 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn detached_cgroup_reaper_removes_empty_cgroup_after_supervisor_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let cgroup = temp.path().join("delegated-run");
+        fs::create_dir(&cgroup).unwrap();
+        fs::write(cgroup.join("cgroup.procs"), "").unwrap();
+        let mut child = Command::new("/bin/sleep").arg("0.2").spawn().unwrap();
+        let start_ticks = proc_start_ticks(child.id()).unwrap();
+        spawn_cgroup_reaper(&cgroup, child.id(), start_ticks).unwrap();
+        child.wait().unwrap();
+        for _ in 0..150 {
+            if !cgroup.exists() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!cgroup.exists(), "detached reaper left an empty cgroup behind");
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
     fn parses_network_device_byte_counters_and_sums_interfaces() {
         let sample = r#"Inter-| Receive | Transmit
  face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed
