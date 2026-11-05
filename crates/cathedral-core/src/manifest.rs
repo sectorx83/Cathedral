@@ -266,6 +266,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_zero_resource_limits_and_extreme_cpu_quota() {
+        let mut manifest = Manifest::minimal("resource-lab");
+        manifest.resources.memory_max_bytes = Some(0);
+        assert!(manifest.validate().is_err());
+        manifest.resources.memory_max_bytes = None;
+        manifest.resources.cpu_quota_percent = Some(1001);
+        assert!(manifest.validate().is_err());
+        manifest.resources.cpu_quota_percent = Some(100);
+        manifest.resources.pids_max = Some(0);
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
     fn writes_and_reloads_manifest_atomically() {
         let temp = tempdir().unwrap();
         let path = temp.path().join("cathedral.toml");
