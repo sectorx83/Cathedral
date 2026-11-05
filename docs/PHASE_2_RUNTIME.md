@@ -47,7 +47,8 @@ are sampled from procfs.
 
 - `run` stores a run ID, process identity, command, and combined output log.
 - `monitor` reports process state, virtual/resident memory, CPU ticks, disk
-  I/O counters, and cgroup aggregate metrics when available. Use `--watch`
+  I/O counters, shared network-namespace byte counters, and cgroup aggregate
+  metrics when available. Use `--watch`
   for repeated sampling and `--interval-seconds` to set the sample interval.
 - `processes` lists recorded runs and their current resource samples.
 - `logs` reads the combined stdout/stderr log for a selected or latest run.
@@ -58,7 +59,7 @@ are sampled from procfs.
   `runs/<experiment-id>/<run-id>/metrics.jsonl` under Cathedral's data directory, outside the writable experiment workspace.
 - A detached cleanup helper removes an empty delegated cgroup after its supervisor exits; CLI inspection also retries cleanup and reports failures.
 
-The CLI samples on demand, or repeatedly with `monitor --watch`. It does not provide a desktop streaming dashboard, background sampling when no monitor is running, disk-space quotas, or network traffic accounting. Timeout policies are configured per experiment in the manifest; adaptive or per-command timeout profiles are not included.
+The CLI samples on demand, or repeatedly with `monitor --watch`. Network counters are namespace-wide totals, not per-process attribution. The CLI does not provide a desktop streaming dashboard, background sampling when no monitor is running, disk-space quotas, or packet-level network inspection. Timeout policies are configured per experiment in the manifest; adaptive or per-command timeout profiles are not included.
 
 ## Platform status
 
