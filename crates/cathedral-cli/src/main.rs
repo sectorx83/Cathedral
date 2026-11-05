@@ -185,7 +185,15 @@ fn main() -> Result<()> {
             println!("Experiment workspaces checked: {}", items.len());
             println!("Host platform: {}", host.platform.label());
             println!("Host architecture: {}", host.architecture);
-            println!("Workload isolation: planned (Phase 2)");
+            let runtime = cathedral_core::runtime::RuntimeProbe::inspect();
+            println!("Runtime host prerequisites:");
+            println!("  unshare utility: {}", runtime.unshare_binary.label());
+            println!("  user/PID/mount namespaces: {}", runtime.user_pid_mount_namespaces.label());
+            println!("  network namespace: {}", runtime.network_namespace.label());
+            println!("  cgroup v2: {}", runtime.cgroup_v2.label());
+            println!("  cgroup CPU controller: {}", runtime.cpu_controller.label());
+            println!("  cgroup memory controller: {}", runtime.memory_controller.label());
+            println!("Workload isolation: not yet enabled; prerequisite checks are diagnostic only.");
 
             if !issues.is_empty() {
                 for issue in &issues {
