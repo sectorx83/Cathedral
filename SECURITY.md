@@ -2,11 +2,11 @@
 
 ## Status
 
-Cathedral is under active early-stage design. Its isolation and execution systems are not implemented yet. **Do not use the current repository as a sandbox for untrusted code.** No security boundary is being provided by the documentation or planned architecture alone.
+Cathedral has an early Linux workload runtime based on Bubblewrap namespaces and a restricted filesystem view, with optional cgroup v2 resource controls. It has not undergone a security audit and is not a VM or a hardened boundary against hostile code. **Do not use it to execute untrusted workloads that require strong containment.** Windows and macOS workload isolation is not implemented.
 
 ## Phase 1 filesystem handling
 
-Phase 1 rejects parent traversal, symlinked workspace roots, symlinked experiment entries, and workspace paths that are not direct children of Cathedral's managed root. It also checks registered manifests and reports orphaned workspaces through `cathedral doctor`. These checks protect against common mistakes and accidental path substitution, but they are not race-free against a hostile process running with the same user privileges. Phase 1 does not use OS-level directory-handle confinement and does not provide a sandbox or workload isolation.
+Phase 1 rejects parent traversal, symlinked workspace roots, symlinked experiment entries, and workspace paths that are not direct children of Cathedral's managed root. It also checks registered manifests and reports orphaned workspaces through `cathedral doctor`. These checks protect against common mistakes and accidental path substitution, but they are not race-free against a hostile process running with the same user privileges. These Phase 1 filesystem checks do not provide a sandbox. The Linux Phase 2 runner adds a separate OS-level containment layer described below.
 
 ## Threat model
 
@@ -31,6 +31,14 @@ Potential threats include filesystem traversal, symlink attacks, privilege escal
 6. **Validate boundaries:** validate paths, manifests, archive entries, IPC requests, and plugin permissions.
 7. **Safe cleanup:** handle crashes, termination, and interrupted operations without leaving uncontrolled processes or mounts.
 8. **Honest claims:** distinguish enforced controls, advisory measurements, unsupported controls, and unverified assumptions.
+
+## Implemented Linux runtime boundary
+
+The Linux runner uses Bubblewrap to create user, PID, IPC, UTS, and network namespaces. It presents `/usr` and `/etc` read-only, mounts the experiment workspace writable, mounts `/tmp` as temporary storage, and clears the inherited environment before setting a small allowlist plus manifest variables. Network access is disabled by default. Optional memory, CPU, and process-count ceilings are applied using cgroup v2 only when a delegated cgroup root is configured and all requested controller files accept the settings. A failed requested limit prevents launch.
+
+The runner records process identity, combined stdout/stderr, and resource samples. Process and cgroup cleanup is best-effort and reports failures. A kernel vulnerability, a Bubblewrap or kernel configuration defect, or an incorrectly delegated cgroup can still undermine containment. The implementation has not been independently security audited.
+
+Windows and macOS do not yet have workload backends. Their CLI runtime commands return an unsupported-platform error rather than silently running workloads without isolation.
 
 ## Isolation caveats
 
