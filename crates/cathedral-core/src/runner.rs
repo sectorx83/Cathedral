@@ -409,7 +409,10 @@ pid="$1"
 expected="$2"
 cgroup="$3"
 while [ -r "/proc/$pid/stat" ]; do
-    actual=$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')
+    stat=$(cat "/proc/$pid/stat" 2>/dev/null) || break
+    rest=${stat##*) }
+    set -- $rest
+    actual=${20}
     [ "$actual" = "$expected" ] || break
     sleep 0.1
 done
