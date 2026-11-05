@@ -23,9 +23,10 @@ The CLI and future Studio must display these differences clearly. They must not 
 Implemented first backend:
 
 - Bubblewrap user, PID, IPC, UTS, and network namespaces.
-- Read-only `/usr` and `/etc`, writable experiment workspace, private `/tmp`, and a cleared inherited environment.
+- Read-only `/usr`, a restricted `/etc` containing selected read-only configuration files, writable experiment workspace, private `/tmp`, and a cleared inherited environment.
 - Optional cgroup v2 `memory.max`, `cpu.max`, and `pids.max` controls; requested limits fail closed when delegation is unavailable.
-- Process identity tracking, process-group/cgroup termination, combined logs, and procfs/cgroup resource samples.
+- Process identity tracking, process-group/cgroup termination, exit and timeout diagnostics, automatic delegated-cgroup cleanup, combined logs, and procfs/cgroup resource samples.
+- Network access denied by default; configurable network allowlists and host networking are not implemented.
 - Runtime prerequisite checks through `cathedral doctor`.
 
 Availability depends on kernel configuration, Bubblewrap installation, distribution mount layout, unprivileged user namespace policy, and delegated cgroup permissions. Cathedral checks namespace and Bubblewrap prerequisites before launch. Resource limits require the requested controller files to be writable in the configured delegated cgroup subtree.
