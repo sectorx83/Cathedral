@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{collections::HashSet, path::{Path, PathBuf}};
 
 use anyhow::{bail, Context, Result};
 use cathedral_core::{
@@ -110,11 +110,14 @@ fn main() -> Result<()> {
             let items = registry.list()?;
             let workspace = Workspace::new(&root)?;
             let mut issues = Vec::new();
+            let mut known_workspaces = HashSet::new();
 
             for item in &items {
                 let path = Path::new(&item.workspace_path);
                 match workspace.validate(path) {
-                    Ok(valid_path) => match Manifest::load(&valid_path.join("cathedral.toml")) {
+                    Ok(valid_path) => {
+                        known_workspaces.insert(valid_path.clone());
+                        match Manifest::load(&valid_path.join("cathedral.toml")) {
                         Ok(manifest)
                             if manifest.experiment.name == item.name
                                 && manifest.experiment.description == item.description
@@ -127,11 +130,32 @@ fn main() -> Result<()> {
                             "experiment '{}' has an unreadable or invalid manifest: {error}",
                             item.name
                         )),
+                        }
                     },
                     Err(error) => issues.push(format!(
                         "experiment '{}' has an invalid workspace: {error}",
                         item.name
                     )),
+                }
+            }
+
+            for entry in std::fs::read_dir(root.join("experiments"))? {
+                let entry = entry?;
+                let path = entry.path();
+                let metadata = std::fs::symlink_metadata(&path)?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    issues.push(format!(
+                        "managed workspace entry '{}' is not a real directory",
+                        path.display()
+                    ));
+                    continue;
+                }
+                let canonical = path.canonicalize()?;
+                if !known_workspaces.contains(&canonical) {
+                    issues.push(format!(
+                        "unregistered workspace '{}' was found",
+                        path.display()
+                    ));
                 }
             }
 
