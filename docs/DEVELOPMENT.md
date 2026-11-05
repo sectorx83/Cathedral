@@ -23,7 +23,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-The GitHub Actions workflow runs formatting, Clippy, and tests on Linux, Windows, and macOS.
+The GitHub Actions workflow runs formatting, Clippy, and tests on Linux, Windows, and macOS. Core lifecycle diagnostics use structured tracing; set `RUST_LOG=cathedral=debug` to inspect debug events.
 
 ## Current CLI
 
@@ -34,6 +34,7 @@ cargo run -p cathedral -- create demo-lab
 cargo run -p cathedral -- list
 cargo run -p cathedral -- inspect demo-lab
 cargo run -p cathedral -- doctor
+RUST_LOG=cathedral=debug cargo run -p cathedral -- doctor
 cargo run -p cathedral -- delete demo-lab
 ```
 
@@ -55,6 +56,8 @@ Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data dire
 1. Unit tests for domain types, validation, and state transitions.
 2. Registry tests using temporary SQLite databases.
 3. Workspace tests using temporary directories and adversarial path cases.
+4. Registry tests for schema migration, unsupported versions, duplicate legacy markers, and SQLite integrity.
+5. CLI tests for duplicate creation, invalid names, doctor consistency checks, and data-directory overrides.
 4. Integration tests for complete CLI workflows.
 5. Platform tests for capability detection and runtime enforcement.
 6. Reproduction tests for corrupted, incomplete, and incompatible packages.
