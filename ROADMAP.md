@@ -47,7 +47,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 2: Isolation & Observatory
 
-**Status: Complete for the Linux beta backend.** Linux execution uses Bubblewrap namespaces and a restricted filesystem view, network access is denied by default, and optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor (including watch mode), process inspection, logs, and stop, with procfs/cgroup resource samples, exit diagnostics, timeout enforcement, and JSONL history. Windows and macOS runtime backends are explicitly unsupported and remain future work; desktop streaming observability belongs to Phase 4.
+**Status: Implementation complete for the Linux beta backend; final CI verification pending.** Linux execution uses Bubblewrap namespaces and a restricted filesystem view, network access is denied by default, and optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor (including watch mode), process inspection, logs, and stop, with procfs/cgroup resource samples, exit diagnostics, timeout enforcement, network-namespace byte counters, and JSONL history. Windows and macOS runtime backends are explicitly unsupported and remain future work; desktop streaming observability belongs to Phase 4.
 
 **Objective:** Execute experiments under explicit, inspectable resource and isolation policies.
 
