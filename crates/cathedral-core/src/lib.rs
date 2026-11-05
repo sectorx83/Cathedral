@@ -9,7 +9,7 @@ pub mod workspace;
 use std::path::{Path, PathBuf};
 
 use manifest::Manifest;
-use registry::{Experiment, Registry};
+use registry::{Experiment, ExperimentState, Registry};
 use thiserror::Error;
 use workspace::Workspace;
 
@@ -74,6 +74,7 @@ pub fn create_experiment(
         workspace_path: path.to_string_lossy().into_owned(),
         created_at: registry::unix_timestamp(),
         manifest_version: manifest.manifest_version,
+        state: ExperimentState::Ready,
     };
 
     // Write the manifest before registering the experiment. If persistence
@@ -118,9 +119,10 @@ pub fn delete_experiment(data_dir: &Path, name: &str) -> Result<()> {
         .get_by_name(name)?
         .ok_or_else(|| CathedralError::NotFound(name.to_owned()))?;
 
-    // Validate the recorded path before deleting anything from disk. The
-    // workspace manager only permits a direct child of its managed root.
-    Workspace::new(data_dir)?.remove(Path::new(&experiment.workspace_path))?;
+    // Persist intent before touching the filesystem. If the process stops
+    // midway, a later delete command can safely resume the cleanup.
+    registry.mark_deleting(&experiment.id)?;
+    Workspace::new(data_dir)?.remove_if_exists(Path::new(&experiment.workspace_path))?;
     registry.delete_by_id(&experiment.id)?;
     Ok(())
 }
@@ -151,16 +153,18 @@ mod tests {
     }
 
     #[test]
-    fn delete_refuses_a_missing_workspace_without_dropping_registry_entry() {
+    fn delete_resumes_cleanup_when_workspace_was_already_removed() {
         let temp = tempdir().unwrap();
         let item = create_experiment(temp.path(), "missing-lab", Manifest::minimal("missing-lab"))
             .unwrap();
         std::fs::remove_dir_all(&item.workspace_path).unwrap();
 
-        assert!(delete_experiment(temp.path(), "missing-lab").is_err());
-        assert_eq!(
-            inspect_experiment(temp.path(), "missing-lab").unwrap().id,
-            item.id
-        );
+        delete_experiment(temp.path(), "missing-lab").unwrap();
+        assert!(matches!(
+            inspect_experiment(temp.path(), "missing-lab"),
+            Err(CathedralError::NotFound(_))
+        ));
+        assert!(list_experiments(temp.path()).unwrap().is_empty());
+        assert_eq!(item.state, ExperimentState::Ready);
     }
 }
