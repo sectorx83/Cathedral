@@ -20,6 +20,8 @@ use std::{fs::File, io::Read, process::Command};
 pub struct RunRecord {
     pub id: String,
     pub pid: u32,
+    #[serde(default)]
+    pub supervisor_pid: u32,
     pub process_start_ticks: u64,
     pub started_at: u64,
     pub command: Vec<String>,
@@ -231,14 +233,16 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
                 return Err(CathedralError::Manifest(format!("failed to start isolated workload: {error}")));
             }
         };
-        let pid = process.id();
-        // The child is intentionally detached. Its log and identity metadata
-        // allow another Cathedral invocation to inspect or terminate it.
+        let supervisor_pid = process.id();
+        // Bubblewrap's direct child is the workload process inside the new
+        // PID namespace. Its host PID is visible through procfs.
+        let pid = wait_for_workload_pid(supervisor_pid).unwrap_or(supervisor_pid);
         drop(process);
         let start_ticks = proc_start_ticks(pid).unwrap_or(0);
         let record = RunRecord {
             id,
             pid,
+            supervisor_pid,
             process_start_ticks: start_ticks,
             started_at: now_seconds(),
             command: command.to_vec(),
@@ -253,6 +257,7 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
                 let _ = fs::remove_dir(path);
             } else {
                 let _ = Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).status();
+                if supervisor_pid != pid { let _ = Command::new("kill").args(["-TERM", &supervisor_pid.to_string()]).status(); }
             }
             return Err(error);
         }
@@ -298,13 +303,21 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
 pub fn process_state(record: &RunRecord) -> ProcessState {
     #[cfg(target_os = "linux")]
     {
-        match proc_start_ticks(record.pid) {
-            None => ProcessState::Finished,
-            Some(ticks) if record.process_start_ticks != 0 && ticks != record.process_start_ticks => {
-                ProcessState::ProcessIdentityChanged
+        if let Some(ticks) = proc_start_ticks(record.pid) {
+            if record.process_start_ticks != 0 && ticks != record.process_start_ticks {
+                return ProcessState::ProcessIdentityChanged;
             }
-            Some(_) => ProcessState::Running,
+            return ProcessState::Running;
         }
+        if let Some(path) = &record.cgroup_path {
+            let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
+            if !members.trim().is_empty() { return ProcessState::Running; }
+        }
+        let group_exists = unsafe {
+            libc::kill(-(record.pid as i32), 0) == 0
+                || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        };
+        if group_exists { ProcessState::Running } else { ProcessState::Finished }
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -317,7 +330,7 @@ pub fn cleanup_finished(record: &RunRecord) -> Result<()> {
     if process_state(record) != ProcessState::Finished { return Ok(()); }
     if let Some(path) = &record.cgroup_path {
         let path = PathBuf::from(path);
-        if path.exists() {
+        if path.exists() && fs::read_to_string(path.join("cgroup.procs")).unwrap_or_default().trim().is_empty() {
             fs::remove_dir(path).map_err(|error| CathedralError::Manifest(format!(
                 "workload exited but cgroup cleanup failed; remaining processes may still exist: {error}")))?;
         }
@@ -353,6 +366,9 @@ pub fn stop(workspace: &Path, run_id: &str) -> Result<()> {
         let status = Command::new("kill")
             .args(["-TERM", "--", &format!("-{}", record.pid)])
             .status()?;
+        if record.supervisor_pid != 0 && record.supervisor_pid != record.pid {
+            let _ = Command::new("kill").args(["-TERM", &record.supervisor_pid.to_string()]).status();
+        }
         if !status.success() {
             return Err(CathedralError::Manifest("failed to send SIGTERM to the workload process group".to_owned()));
         }
@@ -412,6 +428,18 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn wait_for_workload_pid(supervisor_pid: u32) -> Option<u32> {
+    for _ in 0..100 {
+        let children = fs::read_to_string(format!("/proc/{supervisor_pid}/task/{supervisor_pid}/children")).ok()?;
+        if let Some(pid) = children.split_whitespace().next().and_then(|value| value.parse().ok()) {
+            return Some(pid);
+        }
+        if proc_start_ticks(supervisor_pid).is_none() { return None; }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    None
+}
 #[cfg(target_os = "linux")]
 fn proc_start_ticks(pid: u32) -> Option<u64> {
     let mut stat = String::new();
