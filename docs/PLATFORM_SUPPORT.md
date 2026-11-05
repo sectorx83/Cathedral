@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 1 detects the host operating system and architecture on Linux, Windows, and macOS. It provides a shared capability contract for future native runtime backends. No operating system currently has an implemented or verified workload isolation backend.
+Phase 1 detects the host operating system and architecture on Linux, Windows, and macOS. Phase 2 has started a read-only Linux runtime preflight: `cathedral doctor` checks whether user/PID/mount and network namespaces can be created through `unshare`, and whether cgroup v2 exposes CPU and memory controllers. These checks do not launch experiments or enforce resource limits. No operating system currently has an implemented workload isolation backend.
 
 Linux is the first runtime implementation target. Windows and macOS remain first-class architectural targets, but their functionality must be delivered through native backends and tested independently.
 
