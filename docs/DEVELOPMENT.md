@@ -2,7 +2,7 @@
 
 ## Project status
 
-Phase 1 Foundation & Core Engine is complete. Its Rust workspace, CLI, registry, manifest validation, workspace manager, and diagnostics passed the Linux, Windows, and macOS CI matrix. Runtime isolation, observability, snapshots, reproduction, and Studio are not implemented yet. See [CI_STATUS.md](CI_STATUS.md) for the verified source commit and run.
+Phase 1 Foundation & Core Engine is complete. Its Rust workspace, CLI, registry, manifest validation, workspace manager, and diagnostics passed the Linux, Windows, and macOS CI matrix. Phase 2 adds a Linux Bubblewrap runner, optional cgroup v2 hard limits, process lifecycle commands, captured logs, and procfs/cgroup resource samples. Windows/macOS execution backends, snapshots, reproduction, and Studio remain unimplemented. See [CI_STATUS.md](CI_STATUS.md) for the verified source commit and run.
 
 ## Toolchain
 
@@ -34,11 +34,15 @@ cargo run -p cathedral -- create demo-lab
 cargo run -p cathedral -- list
 cargo run -p cathedral -- inspect demo-lab
 cargo run -p cathedral -- doctor
+cargo run -p cathedral -- run demo-lab -- /usr/bin/printf hello
+cargo run -p cathedral -- monitor demo-lab
+cargo run -p cathedral -- processes demo-lab
+cargo run -p cathedral -- logs demo-lab
 RUST_LOG=cathedral_core=debug,cathedral=debug cargo run -p cathedral -- doctor
 cargo run -p cathedral -- delete demo-lab
 ```
 
-Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data directory.
+Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data directory. Linux workload execution requires Bubblewrap and working unprivileged user namespaces. Set `CATHEDRAL_CGROUP_ROOT` to a delegated cgroup v2 directory to enable resource controls and aggregate process metrics. Resource limits in a manifest fail closed if the delegated controllers are unavailable.
 
 ## Engineering principles
 
@@ -57,7 +61,7 @@ Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data dire
 2. Registry tests using temporary SQLite databases, including schema migration, unsupported versions, duplicate legacy markers, persisted lifecycle transitions, and integrity checks.
 3. Workspace tests using temporary directories and adversarial path cases.
 4. CLI integration tests for complete lifecycle workflows, duplicate creation, invalid names, doctor consistency checks, and data-directory overrides. Core lifecycle tests cover resumable deletion after interruption.
-5. Platform tests for capability detection and runtime enforcement.
+5. Platform tests for capability detection and runtime enforcement. Linux integration tests exercise Bubblewrap when the CI host permits user namespaces.
 6. Reproduction tests for corrupted, incomplete, and incompatible packages.
 
 ## Change workflow
