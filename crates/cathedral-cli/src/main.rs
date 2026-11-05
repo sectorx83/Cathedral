@@ -6,7 +6,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use cathedral_core::{
     create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
-    manifest::Manifest, platform::PlatformInfo, workspace::Workspace,
+    manifest::Manifest, platform::PlatformInfo, runner, workspace::Workspace,
 };
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
@@ -40,6 +40,20 @@ enum Command {
     Delete { name: String },
     /// Check local Cathedral storage, registry, and experiment consistency.
     Doctor,
+    /// Start a command inside the Linux isolated experiment environment.
+    Run {
+        name: String,
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// Show the latest workload state and resource measurements.
+    Monitor { name: String },
+    /// Display captured workload output. Defaults to the latest run.
+    Logs { name: String, run_id: Option<String> },
+    /// List workload processes and their current resource measurements.
+    Processes { name: String },
+    /// Stop a workload process group by run identifier.
+    Stop { name: String, run_id: String },
 }
 
 fn data_dir(override_path: Option<PathBuf>) -> Result<PathBuf> {
@@ -113,6 +127,67 @@ fn main() -> Result<()> {
             delete_experiment(&root, &name)
                 .with_context(|| format!("failed to delete experiment '{name}'"))?;
             println!("Deleted experiment '{name}'");
+        }
+        Command::Run { name, command } => {
+            let item = inspect_experiment(&root, &name)?;
+            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let record = runner::launch(&workspace, &command)?;
+            println!("Started isolated run {}", record.id);
+            println!("PID: {}", record.pid);
+            println!("Command: {}", record.command.join(" "));
+            println!("Logs: {}", record.log_file);
+        }
+        Command::Monitor { name } => {
+            let item = inspect_experiment(&root, &name)?;
+            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let records = runner::list_runs(&workspace)?;
+            let record = records.last().ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
+            println!("Run: {}", record.id);
+            println!("PID: {}", record.pid);
+            println!("State: {}", runner::process_state(record).label());
+            println!("Started (Unix): {}", record.started_at);
+            if let Some(metrics) = runner::metrics(record)? {
+                println!("Process state: {}", metrics.state);
+                println!("Parent PID: {}", metrics.parent_pid);
+                println!("Virtual memory: {} KiB", metrics.virtual_memory_kb);
+                println!("Resident memory: {} KiB", metrics.resident_memory_kb);
+                println!("CPU time: {} ticks (user), {} ticks (system)", metrics.user_cpu_ticks, metrics.system_cpu_ticks);
+                println!("Disk I/O: {} bytes read, {} bytes written", metrics.read_bytes, metrics.write_bytes);
+            } else {
+                println!("Process metrics: unavailable (process exited or identity changed)");
+            }
+        }
+        Command::Logs { name, run_id } => {
+            let item = inspect_experiment(&root, &name)?;
+            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let records = runner::list_runs(&workspace)?;
+            let id = run_id.or_else(|| records.last().map(|record| record.id.clone()))
+                .ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
+            print!("{}", runner::logs(&workspace, &id)?);
+        }
+        Command::Processes { name } => {
+            let item = inspect_experiment(&root, &name)?;
+            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            let records = runner::list_runs(&workspace)?;
+            if records.is_empty() {
+                println!("No workload runs recorded.");
+            } else {
+                println!("{:<36} {:<10} {:<10} {:>12} {:>12}", "RUN ID", "PID", "STATE", "RSS (KiB)", "READ (B)");
+                for record in records {
+                    let state = runner::process_state(&record);
+                    let metrics = runner::metrics(&record)?;
+                    println!("{:<36} {:<10} {:<10} {:>12} {:>12}",
+                        record.id, record.pid, state.label(),
+                        metrics.as_ref().map(|m| m.resident_memory_kb).unwrap_or(0),
+                        metrics.as_ref().map(|m| m.read_bytes).unwrap_or(0));
+                }
+            }
+        }
+        Command::Stop { name, run_id } => {
+            let item = inspect_experiment(&root, &name)?;
+            let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
+            runner::stop(&workspace, &run_id)?;
+            println!("Termination signal sent to run {run_id}");
         }
         Command::Doctor => {
             let registry = initialize(&root)?;
