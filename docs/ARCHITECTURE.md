@@ -59,7 +59,7 @@ The runtime must never silently downgrade an enforced security setting to an adv
 
 ### Observatory
 
-The Phase 2 CLI observatory collects process state, virtual/resident memory, CPU ticks, process I/O, cgroup memory/CPU/process counts, combined logs, and exit status. `monitor --watch` samples repeatedly; samples are appended to per-run JSONL history. Streaming dashboards, automatic timeout policies, and full disk-space/network traffic accounting remain future work.
+The Phase 2 CLI observatory collects process state, virtual/resident memory, CPU ticks, process disk I/O, shared network-namespace byte counters, cgroup memory/CPU/process counts, combined logs, exit codes, and timeout outcomes. `monitor --watch` samples repeatedly; samples are appended to per-run JSONL history. Streaming dashboards, disk-space quotas, packet-level inspection, and per-process network attribution remain future work.
 
 ### Snapshot and reproduction
 
