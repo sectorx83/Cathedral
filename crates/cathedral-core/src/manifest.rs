@@ -95,6 +95,7 @@ impl Manifest {
                 .open(&temporary)?;
             file.write_all(encoded.as_bytes())?;
             file.sync_all()?;
+            drop(file);
             fs::rename(&temporary, path)?;
             Ok(())
         })();
