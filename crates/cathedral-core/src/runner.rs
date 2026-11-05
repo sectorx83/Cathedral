@@ -22,10 +22,14 @@ pub struct RunRecord {
     pub pid: u32,
     #[serde(default)]
     pub supervisor_pid: u32,
+    #[serde(default)]
+    pub supervisor_start_ticks: u64,
     pub process_start_ticks: u64,
     pub started_at: u64,
     pub command: Vec<String>,
     pub log_file: String,
+    #[serde(default)]
+    pub exit_status_file: String,
     #[serde(default)]
     pub cgroup_path: Option<String>,
 }
@@ -224,6 +228,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         child.args([
             "--unshare-all",
             "--new-session",
+            "--die-with-parent",
             "--ro-bind", "/usr", "/usr",
             "--symlink", "usr/bin", "/bin",
             "--symlink", "usr/sbin", "/sbin",
@@ -254,16 +259,30 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         };
         child.arg("--chdir").arg(&sandbox_workdir).arg("--");
         child.args(command);
-        child.stdin(Stdio::null()).stdout(Stdio::from(log)).stderr(Stdio::from(stderr));
+        let bwrap_args = child.get_args().map(|arg| arg.to_os_string()).collect::<Vec<_>>();
+        let status_path = directory.join("exit-status");
+        let mut supervisor = Command::new("/bin/sh");
+        supervisor
+            .args([
+                "-c",
+                "bwrap \"$@\"; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; exit \"$status\"",
+                "cathedral-supervisor",
+                "bwrap",
+            ])
+            .args(bwrap_args)
+            .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log))
+            .stderr(Stdio::from(stderr));
         #[cfg(unix)]
         {
             use std::os::unix::{ffi::OsStrExt, process::CommandExt};
-            child.process_group(0);
+            supervisor.process_group(0);
             if let Some(path) = &cgroup_path {
                 let control_file = std::ffi::CString::new(path.join("cgroup.procs").as_os_str().as_bytes())
                     .map_err(|_| CathedralError::Manifest("cgroup path contains a null byte".to_owned()))?;
                 unsafe {
-                    child.pre_exec(move || {
+                    supervisor.pre_exec(move || {
                         let fd = libc::open(control_file.as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC);
                         if fd < 0 { return Err(std::io::Error::last_os_error()); }
                         let mut buffer = [0u8; 20];
@@ -286,7 +305,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
                 }
             }
         }
-        let process = match child.spawn() {
+        let process = match supervisor.spawn() {
             Ok(process) => process,
             Err(error) => {
                 if let Some(path) = &cgroup_path { let _ = fs::remove_dir(path); }
@@ -294,19 +313,20 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             }
         };
         let supervisor_pid = process.id();
-        // Bubblewrap's direct child is the workload process inside the new
-        // PID namespace. Its host PID is visible through procfs.
         let pid = wait_for_workload_pid(supervisor_pid).unwrap_or(supervisor_pid);
+        let supervisor_start_ticks = proc_start_ticks(supervisor_pid).unwrap_or(0);
         drop(process);
         let start_ticks = proc_start_ticks(pid).unwrap_or(0);
         let record = RunRecord {
             id,
             pid,
             supervisor_pid,
+            supervisor_start_ticks,
             process_start_ticks: start_ticks,
             started_at: now_seconds(),
             command: command.to_vec(),
             log_file: log_path.to_string_lossy().into_owned(),
+            exit_status_file: status_path.to_string_lossy().into_owned(),
             cgroup_path: cgroup_path.map(|path| path.to_string_lossy().into_owned()),
         };
         let encoded = serde_json::to_vec_pretty(&record)
@@ -316,8 +336,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
                 let _ = fs::write(PathBuf::from(path).join("cgroup.kill"), "1");
                 let _ = fs::remove_dir(path);
             } else {
-                let _ = Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).status();
-                if supervisor_pid != pid { let _ = Command::new("kill").args(["-TERM", &supervisor_pid.to_string()]).status(); }
+                let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
             }
             return Err(error);
         }
@@ -367,8 +386,9 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
 pub fn process_state(record: &RunRecord) -> ProcessState {
     #[cfg(target_os = "linux")]
     {
-        if let Some(ticks) = proc_start_ticks(record.pid) {
-            if record.process_start_ticks != 0 && ticks != record.process_start_ticks {
+        let supervisor_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
+        if let Some(ticks) = proc_start_ticks(supervisor_pid) {
+            if record.supervisor_start_ticks != 0 && ticks != record.supervisor_start_ticks {
                 return ProcessState::ProcessIdentityChanged;
             }
             return ProcessState::Running;
@@ -378,7 +398,7 @@ pub fn process_state(record: &RunRecord) -> ProcessState {
             if !members.trim().is_empty() { return ProcessState::Running; }
         }
         let group_exists = unsafe {
-            libc::kill(-(record.pid as i32), 0) == 0
+            libc::kill(-(supervisor_pid as i32), 0) == 0
                 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
         };
         if group_exists { ProcessState::Running } else { ProcessState::Finished }
@@ -417,7 +437,7 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
             }
             ProcessState::Running => {}
         }
-        if record.process_start_ticks == 0 && record.cgroup_path.is_none() {
+        if record.supervisor_start_ticks == 0 && record.cgroup_path.is_none() {
             return Err(CathedralError::Manifest("cannot verify workload PID identity; refusing to signal a possibly reused PID".to_owned()));
         }
         if let Some(path) = &record.cgroup_path {
@@ -427,12 +447,10 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
                 return Ok(());
             }
         }
+        let supervisor_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
         let status = Command::new("kill")
-            .args(["-TERM", "--", &format!("-{}", record.pid)])
+            .args(["-TERM", "--", &format!("-{supervisor_pid}")])
             .status()?;
-        if record.supervisor_pid != 0 && record.supervisor_pid != record.pid {
-            let _ = Command::new("kill").args(["-TERM", &record.supervisor_pid.to_string()]).status();
-        }
         if !status.success() {
             return Err(CathedralError::Manifest("failed to send SIGTERM to the workload process group".to_owned()));
         }
@@ -670,6 +688,7 @@ mod tests {
             started_at: 0,
             command: vec!["test".to_owned()],
             log_file: String::new(),
+            exit_status_file: String::new(),
             cgroup_path: None,
         };
         assert_eq!(process_state(&record), ProcessState::ProcessIdentityChanged);
