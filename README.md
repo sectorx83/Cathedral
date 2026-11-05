@@ -31,7 +31,7 @@ The initial Rust workspace currently provides:
 
 - A CLI named `cathedral`.
 - SQLite-backed local experiment metadata.
-- Experiment create, list, inspect, and delete operations.
+- Experiment create, list, inspect, and delete operations with persisted `ready` / `deleting` lifecycle states and resumable deletion.
 - Version-1 TOML manifest parsing, environment validation, and declared dependency metadata (recorded only; not resolved or installed).
 - Managed experiment workspace directories.
 - Managed workspace path validation and symlink checks for validation and deletion.
@@ -42,7 +42,7 @@ The initial Rust workspace currently provides:
 - Host data-directory selection with a `CATHEDRAL_HOME` override.
 - A cross-platform CI matrix for Linux, Windows, and macOS.
 
-Phase 1 now includes transactional registry initialization with legacy schema-marker migration, SQLite integrity checks, atomic manifest persistence, validated dependency metadata, managed-path consistency checks in `cathedral doctor`, structured tracing, and expanded lifecycle failure tests. Runtime execution and isolation remain Phase 2 work.
+Phase 1 now includes transactional registry initialization with legacy schema migration, persisted lifecycle state, resumable deletion, SQLite integrity checks, atomic manifest persistence, validated dependency metadata, managed-path consistency checks in `cathedral doctor`, structured tracing, and expanded lifecycle failure tests. Runtime execution and isolation remain Phase 2 work.
 
 ## Build from source
 
