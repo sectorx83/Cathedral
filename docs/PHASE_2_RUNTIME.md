@@ -9,8 +9,7 @@ writable experiment workspace, and a private temporary filesystem. The inherited
 host environment is cleared; `PATH`, `HOME`, `TMPDIR`, and explicitly declared
 manifest variables are passed to the workload.
 
-Network access is disabled by default. There is no network allowlist or host
-network mode in this release.
+Network access is disabled by default. Network access is disabled for every run. This release does not offer a network allowlist or an opt-in host-network mode; network-dependent workloads must use another explicitly documented setup outside the sandbox.
 
 Bubblewrap must be installed and the host must permit the namespace operations.
 `cathedral doctor` reports the relevant prerequisites. Launch fails if
@@ -52,14 +51,14 @@ are sampled from procfs.
   for repeated sampling and `--interval-seconds` to set the sample interval.
 - `processes` lists recorded runs and their current resource samples.
 - `logs` reads the combined stdout/stderr log for a selected or latest run.
-- `stop` sends termination to the run's cgroup when available, otherwise to
-  the workload process group.
+- `stop` uses `cgroup.kill` when a delegated cgroup is available. Without a
+  cgroup it sends `SIGTERM` to the process group, waits five seconds, then
+  escalates to `SIGKILL` if the supervisor is still running.
 - Samples requested through `monitor` or `processes` are appended to
   `runs/<experiment-id>/<run-id>/metrics.jsonl` under Cathedral's data directory, outside the writable experiment workspace.
+- A detached cleanup helper removes an empty delegated cgroup after its supervisor exits; CLI inspection also retries cleanup and reports failures.
 
-The current CLI samples on demand. It does not provide a streaming dashboard,
-automatic periodic history collection, disk-space quotas, or network traffic
-accounting. Timeout policies are configured per experiment in the manifest; adaptive or per-command timeout profiles are not included.
+The CLI samples on demand, or repeatedly with `monitor --watch`. It does not provide a desktop streaming dashboard, background sampling when no monitor is running, disk-space quotas, or network traffic accounting. Timeout policies are configured per experiment in the manifest; adaptive or per-command timeout profiles are not included.
 
 ## Platform status
 
