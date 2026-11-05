@@ -530,6 +530,10 @@ pub fn termination_signal(record: &RunRecord) -> Option<String> {
     let value = fs::read_to_string(&record.exit_status_file).ok()?;
     value.trim().strip_prefix("signal:").map(str::to_owned)
 }
+
+pub fn timed_out(record: &RunRecord) -> bool {
+    record.timeout_seconds.is_some() && exit_status(record).is_some_and(|code| code == 124 || code == 137)
+}
 pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     let directory = run_directory(run_root, run_id)?;
     let _record = read_record(&directory.join("run.json"))?;
@@ -785,6 +789,17 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(process_state(&sleeping), ProcessState::Finished);
+
+        let mut timed_manifest = Manifest::minimal("runtime-test");
+        timed_manifest.resources.timeout_seconds = Some(1);
+        timed_manifest.write_to(&workspace.join("cathedral.toml")).unwrap();
+        let timed = launch(workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        for _ in 0..300 {
+            if exit_status(&timed).is_some() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(timed_out(&timed));
+        assert_eq!(exit_status(&timed), Some(124));
     }
 
     #[cfg(target_os = "linux")]
