@@ -18,6 +18,8 @@ pub struct Manifest {
     pub environment: EnvironmentSection,
     #[serde(default)]
     pub dependencies: DependencySection,
+    #[serde(default)]
+    pub resources: ResourceSection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +41,19 @@ pub struct EnvironmentSection {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields)]
+pub struct ResourceSection {
+    /// Hard memory ceiling in bytes, enforced through cgroup v2.
+    #[serde(default)]
+    pub memory_max_bytes: Option<u64>,
+    /// CPU quota as a percentage of one logical CPU (100 = one full CPU).
+    #[serde(default)]
+    pub cpu_quota_percent: Option<u32>,
+    /// Maximum number of processes/threads in the experiment cgroup.
+    #[serde(default)]
+    pub pids_max: Option<u32>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct DependencySection {
     /// Declared package names and version requirements. Phase 1 records these
     /// values but deliberately does not resolve or install packages.
@@ -56,6 +71,7 @@ impl Manifest {
             },
             environment: EnvironmentSection::default(),
             dependencies: DependencySection::default(),
+            resources: ResourceSection::default(),
         }
     }
 
@@ -133,6 +149,15 @@ impl Manifest {
                     "working_directory must be a portable relative path without traversal, got '{path}'"
                 )));
             }
+        }
+        if self.resources.memory_max_bytes == Some(0) {
+            return Err(CathedralError::Manifest("resources.memory_max_bytes must be greater than zero".to_owned()));
+        }
+        if self.resources.cpu_quota_percent.is_some_and(|value| value == 0 || value > 1000) {
+            return Err(CathedralError::Manifest("resources.cpu_quota_percent must be between 1 and 1000".to_owned()));
+        }
+        if self.resources.pids_max == Some(0) {
+            return Err(CathedralError::Manifest("resources.pids_max must be greater than zero".to_owned()));
         }
         for (name, requirement) in &self.dependencies.packages {
             let valid_name = !name.is_empty()
