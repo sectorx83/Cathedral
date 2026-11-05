@@ -165,7 +165,9 @@ fn main() -> Result<()> {
                     println!("Process metrics: unavailable (workload exited)");
                 }
                 if runner::process_state(record) == runner::ProcessState::Finished {
-                    if let Some(code) = runner::exit_status(record) {
+                    if runner::timed_out(record) {
+                        println!("Timed out after {} seconds", record.timeout_seconds.unwrap_or_default());
+                    } else if let Some(code) = runner::exit_status(record) {
                         println!("Exit code: {code}");
                     } else if let Some(signal) = runner::termination_signal(record) {
                         println!("Terminated by {signal}");
