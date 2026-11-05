@@ -204,7 +204,7 @@ fn has_column(connection: &Connection, table: &str, column: &str) -> Result<bool
     let columns = statement
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(columns.iter().any(|found| found == column))
+    Ok(columns.iter().any(|found| found.as_str() == column))
 }
 
 fn create_experiments_table(connection: &Connection) -> Result<()> {
