@@ -53,8 +53,7 @@ impl Registry {
         // The first release used a one-row schema_version table. The second
         // schema uses SQLite's transactional user_version marker and persists
         // lifecycle state so interrupted deletions can be resumed safely.
-        let transaction =
-            connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current_version: i64 =
             transaction.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
@@ -96,7 +95,10 @@ impl Registry {
         verify_experiment_columns(&transaction)?;
         transaction.commit()?;
 
-        tracing::debug!(schema_version = REGISTRY_SCHEMA_VERSION, "experiment registry ready");
+        tracing::debug!(
+            schema_version = REGISTRY_SCHEMA_VERSION,
+            "experiment registry ready"
+        );
         Ok(Self { connection })
     }
 
