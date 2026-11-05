@@ -99,7 +99,10 @@ impl Registry {
         verify_experiment_columns(&transaction)?;
         transaction.commit()?;
 
-        tracing::debug!(schema_version = REGISTRY_SCHEMA_VERSION, "experiment registry ready");
+        tracing::debug!(
+            schema_version = REGISTRY_SCHEMA_VERSION,
+            "experiment registry ready"
+        );
         Ok(Self { connection })
     }
 
