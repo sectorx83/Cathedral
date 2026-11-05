@@ -413,9 +413,14 @@ pub fn process_state(record: &RunRecord) -> ProcessState {
             if record.supervisor_start_ticks != 0 && ticks != record.supervisor_start_ticks {
                 return ProcessState::ProcessIdentityChanged;
             }
-            if !matches!(proc_state(supervisor_pid), Some('Z' | 'X')) {
-                return ProcessState::Running;
+            if matches!(proc_state(supervisor_pid), Some('Z' | 'X')) {
+                if let Some(path) = &record.cgroup_path {
+                    let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
+                    return if members.trim().is_empty() { ProcessState::Finished } else { ProcessState::Running };
+                }
+                return ProcessState::Finished;
             }
+            return ProcessState::Running;
         }
         if let Some(path) = &record.cgroup_path {
             let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
