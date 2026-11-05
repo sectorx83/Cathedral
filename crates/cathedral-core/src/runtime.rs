@@ -82,6 +82,7 @@ fn probe_unshare(arguments: &[&str]) -> ProbeStatus {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn controller_status(contents: Option<&str>, controller: &str) -> ProbeStatus {
     match contents {
         Some(value) if value.split_whitespace().any(|item| item == controller) => ProbeStatus::Available,
