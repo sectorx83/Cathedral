@@ -208,8 +208,24 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
 
         let manifest = Manifest::load(&canonical_workspace.join("cathedral.toml"))?;
         let relative_workdir = manifest.environment.working_directory.as_deref().unwrap_or(".");
-        let workdir = canonical_workspace.join(relative_workdir);
-        fs::create_dir_all(&workdir)?;
+        let mut workdir = canonical_workspace.clone();
+        for component in Path::new(relative_workdir).components() {
+            match component {
+                std::path::Component::CurDir => continue,
+                std::path::Component::Normal(part) => {
+                    workdir.push(part);
+                    match fs::symlink_metadata(&workdir) {
+                        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                            return Err(CathedralError::UnsafePath(workdir));
+                        }
+                        Ok(_) => {}
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir(&workdir)?,
+                        Err(error) => return Err(error.into()),
+                    }
+                }
+                _ => return Err(CathedralError::Manifest("working directory contains an unsafe path component".to_owned())),
+            }
+        }
         let canonical_workdir = workdir.canonicalize()?;
         if !canonical_workdir.starts_with(&canonical_workspace) {
             return Err(CathedralError::Manifest("working directory resolves outside the experiment workspace".to_owned()));
@@ -234,7 +250,14 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             "--symlink", "usr/sbin", "/sbin",
             "--symlink", "usr/lib", "/lib",
             "--symlink", "usr/lib64", "/lib64",
-            "--ro-bind", "/etc", "/etc",
+            "--dir", "/etc",
+            "--ro-bind-try", "/etc/ssl", "/etc/ssl",
+            "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
+            "--ro-bind-try", "/etc/passwd", "/etc/passwd",
+            "--ro-bind-try", "/etc/group", "/etc/group",
+            "--ro-bind-try", "/etc/nsswitch.conf", "/etc/nsswitch.conf",
+            "--ro-bind-try", "/etc/localtime", "/etc/localtime",
+            "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
             "--proc", "/proc",
             "--dev", "/dev",
             "--tmpfs", "/tmp",
@@ -674,7 +697,8 @@ mod tests {
     fn launches_and_captures_a_bubblewrap_workload_when_available() {
         let available = Command::new("bwrap").args([
             "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
-            "--symlink", "usr/bin", "/bin", "--ro-bind", "/etc", "/etc",
+            "--symlink", "usr/bin", "/bin", "--dir", "/etc",
+            "--ro-bind-try", "/etc/passwd", "/etc/passwd",
             "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
             "--", "/usr/bin/true"
         ]).status().is_ok_and(|status| status.success());
