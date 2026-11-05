@@ -4,7 +4,9 @@
 //! and network namespaces plus a restricted filesystem view. This is a
 //! container-style boundary, not a VM or a defense against kernel exploits.
 
-use crate::{manifest::Manifest, CathedralError, Result};
+use crate::{CathedralError, Result};
+#[cfg(target_os = "linux")]
+use crate::manifest::Manifest;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::{Path, PathBuf}};
 #[cfg(target_os = "linux")]
