@@ -191,7 +191,6 @@ pub fn list_runs(run_root: &Path) -> Result<Vec<RunRecord>> {
             let record = read_record(&record_path)?;
             cleanup_finished(&record)?;
             records.push(record);
-            }
         }
     }
     records.sort_by_key(|record| record.started_at);
