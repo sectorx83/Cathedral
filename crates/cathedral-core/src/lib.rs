@@ -153,6 +153,21 @@ mod tests {
     }
 
     #[test]
+    fn delete_resumes_after_a_persisted_deleting_state() {
+        let temp = tempdir().unwrap();
+        let item =
+            create_experiment(temp.path(), "resume-lab", Manifest::minimal("resume-lab")).unwrap();
+        initialize(temp.path())
+            .unwrap()
+            .mark_deleting(&item.id)
+            .unwrap();
+
+        delete_experiment(temp.path(), "resume-lab").unwrap();
+        assert!(list_experiments(temp.path()).unwrap().is_empty());
+        assert!(!Path::new(&item.workspace_path).exists());
+    }
+
+    #[test]
     fn delete_resumes_cleanup_when_workspace_was_already_removed() {
         let temp = tempdir().unwrap();
         let item = create_experiment(temp.path(), "missing-lab", Manifest::minimal("missing-lab"))
