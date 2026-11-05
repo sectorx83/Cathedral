@@ -423,5 +423,4 @@ mod tests {
         assert_eq!(migrated.state, ExperimentState::Ready);
         assert_eq!(registry.schema_version().unwrap(), 2);
     }
-
 }
