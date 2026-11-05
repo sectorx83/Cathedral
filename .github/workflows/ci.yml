@@ -36,6 +36,14 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - name: Run tests
         run: cargo test --locked --workspace --all-features
+      - name: Upload the tested formatting and lockfile
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cathedral-verified-source
+          path: |
+            crates/
+            Cargo.lock
 
   commit-verified-maintenance:
     name: Commit verified formatting and lockfile
@@ -47,14 +55,15 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install stable Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download the exact tested source files
+        uses: actions/download-artifact@v4
         with:
-          components: rustfmt
-      - name: Generate formatted sources and lockfile
+          name: cathedral-verified-source
+          path: verified
+      - name: Apply tested formatting and lockfile
         run: |
-          cargo fmt --all
-          cargo generate-lockfile
+          cp -R verified/crates/. crates/
+          cp verified/Cargo.lock Cargo.lock
       - name: Record the verified source commit
         run: |
           mkdir -p docs
