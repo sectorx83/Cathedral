@@ -470,7 +470,6 @@ pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(CathedralError::UnsafePath(log_path));
     }
-    let _ = record;
     Ok(fs::read_to_string(log_path)?)
 }
 
