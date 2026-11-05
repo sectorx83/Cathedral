@@ -70,6 +70,7 @@ impl ProcessState {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn ensure_real_directory(path: &Path) -> Result<PathBuf> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
@@ -115,6 +116,7 @@ fn validate_run_root(run_root: &Path) -> Result<PathBuf> {
     Ok(canonical_root)
 }
 
+#[cfg(target_os = "linux")]
 fn ensure_run_root(run_root: &Path) -> Result<PathBuf> {
     let runs_parent = run_root.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
     ensure_real_directory(runs_parent)?;
@@ -135,6 +137,7 @@ fn run_directory(run_root: &Path, id: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+#[cfg(target_os = "linux")]
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().ok_or_else(|| {
         CathedralError::Manifest("run metadata path has no parent".to_owned())
@@ -204,9 +207,9 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (workspace, run_root, command);
-        return Err(CathedralError::Manifest(
+        Err(CathedralError::Manifest(
             "isolated workload execution is currently supported on Linux only".to_owned(),
-        ));
+        ))
     }
     #[cfg(target_os = "linux")]
     {
@@ -447,6 +450,7 @@ fi
             "workload started, but automatic cgroup cleanup helper could not start: {error}"
         )))
 }
+#[cfg(target_os = "linux")]
 fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
     let limits = &manifest.resources;
     let has_limits = limits.memory_max_bytes.is_some()
@@ -454,11 +458,11 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
         || limits.pids_max.is_some();
     let configured_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT");
     if !has_limits && configured_root.is_none() {
-        return Ok(None);
+        Ok(None);
     }
     #[cfg(not(target_os = "linux"))]
     {
-        return Err(CathedralError::Manifest("hard resource limits currently require Linux cgroup v2".to_owned()));
+        Err(CathedralError::Manifest("hard resource limits currently require Linux cgroup v2".to_owned()))
     }
     #[cfg(target_os = "linux")]
     {
@@ -571,7 +575,7 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (run_root, run_id);
-        return Err(CathedralError::Manifest("process control is currently supported on Linux only".to_owned()));
+        Err(CathedralError::Manifest("process control is currently supported on Linux only".to_owned()))
     }
     #[cfg(target_os = "linux")]
     {
@@ -684,7 +688,7 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = record;
-        return Err(CathedralError::Manifest("process inspection is currently supported on Linux only".to_owned()));
+        Err(CathedralError::Manifest("process inspection is currently supported on Linux only".to_owned()))
     }
     #[cfg(target_os = "linux")]
     {
@@ -880,6 +884,7 @@ fn proc_start_ticks(pid: u32) -> Option<u64> {
     rest.split_whitespace().nth(19)?.parse().ok()
 }
 
+#[cfg(target_os = "linux")]
 fn now_seconds() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
