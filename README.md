@@ -7,7 +7,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Early planning and documentation. The four-phase roadmap is defined, but the runtime, isolation backends, observatory, snapshot engine, and desktop studio are not implemented yet. Do not treat planned capabilities as available features.
+> **Project status:** Phase 1 foundation is under active implementation. The experiment registry, manifest parser, workspace manager, and initial CLI are now in the repository. Runtime isolation, observability, snapshots, reproduction, and desktop studio are not implemented yet.
 
 ## What Cathedral is
 
@@ -22,6 +22,68 @@ The intended workflow is:
 5. Capture a checkpoint and export the experiment.
 6. Recreate it on another compatible machine and inspect any differences.
 
+## Current Phase 1 implementation
+
+The initial Rust workspace currently provides:
+
+- A CLI named `cathedral`.
+- SQLite-backed local experiment metadata.
+- Experiment create, list, inspect, and delete operations.
+- Version-1 TOML manifest parsing and validation.
+- Managed experiment workspace directories.
+- Basic path and symlink checks for managed workspace deletion.
+- Host data-directory selection with a `CATHEDRAL_HOME` override.
+- A cross-platform CI matrix for Linux, Windows, and macOS.
+
+These features are early foundation work. The project still needs additional error-recovery, registry migration, platform, and integration testing before Phase 1 is complete.
+
+## Build from source
+
+Install the stable Rust toolchain, then run:
+
+```sh
+cargo build --workspace
+cargo test --workspace
+cargo run -p cathedral -- --help
+```
+
+Initialize Cathedral and create an experiment:
+
+```sh
+cargo run -p cathedral -- init
+cargo run -p cathedral -- create hello-lab
+cargo run -p cathedral -- list
+cargo run -p cathedral -- inspect hello-lab
+cargo run -p cathedral -- doctor
+cargo run -p cathedral -- delete hello-lab
+```
+
+To use a custom data directory, pass `--home /path/to/cathedral-data` before the subcommand or set `CATHEDRAL_HOME`.
+
+## Experiment manifest
+
+A manifest can be supplied when creating an experiment:
+
+```toml
+manifest_version = 1
+
+[experiment]
+name = "hello-lab"
+description = "A small development experiment"
+
+[environment]
+working_directory = "."
+
+[environment.variables]
+RUST_LOG = "info"
+```
+
+```sh
+cargo run -p cathedral -- create hello-lab --manifest ./cathedral.toml
+```
+
+Manifest values are configuration data. Phase 1 does not execute commands, install dependencies, or launch workloads.
+
 ## Design principles
 
 - **Reproducibility first:** record the inputs and configuration needed to recreate an experiment.
@@ -35,7 +97,7 @@ The intended workflow is:
 
 Cathedral is intended for Linux, Windows, and macOS. Linux is the first implementation target. Cross-platform support is an architectural requirement, not a claim that all platforms already have equivalent functionality.
 
-The shared core will define common concepts and capability interfaces. Platform backends will implement those interfaces using native facilities. Cathedral must report unavailable or weaker capabilities instead of silently pretending that behavior is identical.
+The shared core defines common concepts and capability interfaces. Platform backends will implement those interfaces using native facilities. Cathedral must report unavailable or weaker capabilities instead of silently pretending that behavior is identical.
 
 ## Roadmap
 
@@ -50,18 +112,11 @@ The project is organized into four phases:
 
 See [ROADMAP.md](ROADMAP.md) for scope and completion criteria.
 
-## Planned CLI
+## Planned CLI beyond Phase 1
 
-The following commands describe the intended interface. They are **planned**, not currently usable:
+The following commands are planned for later phases and are **not available yet**:
 
 ```text
-cathedral init
-cathedral create my-experiment
-cathedral list
-cathedral inspect my-experiment
-cathedral delete my-experiment
-cathedral doctor
-
 cathedral run my-experiment
 cathedral monitor my-experiment
 cathedral logs my-experiment
@@ -81,22 +136,20 @@ cathedral reproduce experiment.cath
 - [Architecture](docs/ARCHITECTURE.md): system boundaries and technical design.
 - [Roadmap](ROADMAP.md): the four approved phases and their acceptance criteria.
 - [Platform support](docs/PLATFORM_SUPPORT.md): cross-platform strategy and capability reporting.
-- [Experiment manifest](docs/EXPERIMENT_MANIFEST.md): proposed `cathedral.toml` format and validation rules.
+- [Experiment manifest](docs/EXPERIMENT_MANIFEST.md): version-1 `cathedral.toml` format.
 - [Development setup](docs/DEVELOPMENT.md): development workflow and quality gates.
 - [Security model](SECURITY.md): threat model, isolation boundaries, and security commitments.
 - [Contributing](CONTRIBUTING.md): contribution workflow and engineering standards.
 
 ## Technology direction
 
-The current architectural direction is a Rust workspace for the core and CLI, SQLite for local metadata, and a Tauri + React + TypeScript desktop application in the final phase. The local API is expected to use Axum with WebSockets where streaming updates are needed.
+The core and CLI use Rust. SQLite stores local metadata. A Tauri + React + TypeScript desktop application is planned for the final phase. A local API is expected to use Axum with WebSockets where streaming updates are needed.
 
 Linux isolation is expected to build on namespaces, cgroups v2, and filesystem layering. Windows and macOS will use their own native isolation mechanisms. These are design choices under evaluation and will be validated during implementation.
 
-## Project status and expectations
+## Security expectations
 
-Cathedral is in its documentation and foundation-planning stage. No isolation, monitoring, snapshot, reproduction, or desktop functionality should be assumed to exist until it is implemented, tested, and documented.
-
-Security-sensitive features will require explicit capability checks, least privilege, and tests. Containers alone will not be described as a complete security boundary for arbitrary hostile workloads.
+Experiments may contain untrusted code. The current Phase 1 implementation does not execute workloads and is not a sandbox. Containers alone will not be described as a complete security boundary for arbitrary hostile workloads.
 
 ## License
 

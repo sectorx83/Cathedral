@@ -2,39 +2,55 @@
 
 ## Project status
 
-Cathedral is currently documentation-first. The Rust workspace and executable features are planned but not yet present. This guide records the intended development workflow and will be updated as the actual toolchain and commands are introduced.
+The Phase 1 Rust workspace and initial CLI are now present. The project is still early-stage; runtime isolation, observability, snapshots, reproduction, and Studio are not implemented.
 
-## Planned toolchain
+## Toolchain
 
-- Rust stable toolchain and Cargo for the core and CLI.
-- SQLite for local metadata.
-- Tauri, React, and TypeScript for the Phase 4 desktop application.
-- Platform-specific CI runners for Linux, Windows, and macOS.
+- Rust stable toolchain and Cargo.
+- SQLite is bundled through rusqlite for the local registry.
+- Tauri, React, and TypeScript will be introduced during Phase 4.
 
-Exact minimum tool versions will be pinned when the workspace is created. Avoid documenting unverified commands as working setup steps.
+The repository includes a rust-toolchain.toml file that selects stable Rust with rustfmt and Clippy.
 
-## Development principles
+## Build and test
+
+From the repository root:
+
+```sh
+cargo build --workspace
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+```
+
+The GitHub Actions workflow runs formatting, Clippy, and tests on Linux, Windows, and macOS.
+
+## Current CLI
+
+```sh
+cargo run -p cathedral -- --help
+cargo run -p cathedral -- init
+cargo run -p cathedral -- create demo-lab
+cargo run -p cathedral -- list
+cargo run -p cathedral -- inspect demo-lab
+cargo run -p cathedral -- doctor
+cargo run -p cathedral -- delete demo-lab
+```
+
+Use `--home /path/to/data` or `CATHEDRAL_HOME` to select a non-default data directory.
+
+## Engineering principles
 
 - Keep domain logic independent of operating-system APIs.
 - Put native operations behind small platform interfaces.
 - Validate all external input, including manifests and imported packages.
-- Use structured errors and logs.
+- Use structured errors and actionable diagnostics.
 - Make filesystem operations safe against traversal and symlink surprises.
 - Add tests for both successful behavior and failure recovery.
 - Do not claim a security property without a test or platform-specific evidence.
 - Keep documentation aligned with the implementation.
 
-## Expected quality checks
-
-As the Rust workspace is introduced, CI should include:
-
-- `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- `cargo test --workspace`
-
-Platform-specific tests should run on native runners. Tests requiring elevated privileges or kernel features must be isolated and clearly marked rather than silently skipped.
-
-## Suggested test layers
+## Test layers
 
 1. Unit tests for domain types, validation, and state transitions.
 2. Registry tests using temporary SQLite databases.
@@ -45,6 +61,6 @@ Platform-specific tests should run on native runners. Tests requiring elevated p
 
 ## Change workflow
 
-The project workflow uses direct commits to `main`. Keep commits focused and descriptive. Before committing, inspect the diff, run the relevant checks, and update documentation for any behavior or guarantee that changed.
+The project workflow uses direct commits to the main branch. Keep changes focused and descriptive. Before committing, inspect the diff, run the relevant checks, and update documentation for any behavior or guarantee that changed.
 
 Do not mark a phase complete while required tests are failing or while a critical limitation is undocumented.

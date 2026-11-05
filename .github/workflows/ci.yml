@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   rust:
@@ -26,7 +26,19 @@ jobs:
           components: rustfmt, clippy
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
-      - name: Check formatting
+      - name: Apply rustfmt
+        run: cargo fmt --all
+      - name: Commit formatting on main
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add crates
+            git commit -m "style: apply rustfmt"
+            git push origin HEAD:main
+          fi
+      - name: Verify formatting
         run: cargo fmt --all -- --check
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

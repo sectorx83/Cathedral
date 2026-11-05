@@ -2,56 +2,68 @@
 
 ## Status
 
-This document describes the proposed `cathedral.toml` format for Phase 1. The schema is not implemented yet and may change before it is versioned as stable.
+Manifest version 1 is implemented in the Phase 1 core. The schema remains experimental until compatibility and migration rules are finalized.
 
 ## Goals
 
-The manifest should be:
-- Human-readable and easy to version-control.
-- Explicit about runtime and dependency requirements.
-- Strictly validated before an experiment is created or run.
-- Versioned so future Cathedral releases can evolve safely.
-- Portable without embedding machine-specific secrets.
+The manifest is human-readable, versioned, strictly validated, and safe to store in source control. It describes experiment metadata and environment configuration. It does not contain executable shell snippets.
 
-## Proposed example
+## Version 1 format
 
 ```toml
 manifest_version = 1
 
 [experiment]
 name = "hello-lab"
-description = "A small reproducible development experiment"
+description = "A small development experiment"
 
 [environment]
 working_directory = "."
 
-[dependencies]
-# Dependency declarations will be defined by supported package providers.
-# Do not assume arbitrary host packages are captured automatically.
-
-[run]
-# Execution settings will be expanded with the Phase 2 runtime.
-# No workload is launched by Phase 1 manifest parsing.
+[environment.variables]
+RUST_LOG = "info"
 ```
 
-## Validation requirements
+The `experiment.name` field is required. Names must be 1-48 characters, start with a lowercase ASCII letter, end with a lowercase letter or digit, and contain only lowercase ASCII letters, digits, and hyphens.
 
-The Phase 1 parser should:
+The description is optional and limited to 4096 bytes. The environment section is optional. Its working directory, when supplied, must be a relative path without parent-directory traversal. Environment variable names must follow the portable ASCII identifier convention.
 
-1. Require a supported `manifest_version`.
-2. Validate experiment names and reject path separators, traversal components, and reserved names.
-3. Reject unknown required fields and malformed values.
-4. Resolve relative paths against the manifest directory and verify they remain within the permitted project/workspace boundary.
-5. Avoid interpreting manifest text as shell commands.
-6. Return errors with the field path and a useful explanation.
-7. Preserve forward compatibility only for explicitly defined extension namespaces.
+## CLI usage
+
+Create an experiment with a generated minimal manifest:
+
+```sh
+cathedral create hello-lab
+```
+
+Create an experiment from a manifest:
+
+```sh
+cathedral create hello-lab --manifest ./cathedral.toml
+```
+
+The manifest name must match the name passed to the CLI. Cathedral copies the validated manifest into the new managed workspace as `cathedral.toml`.
+
+## Validation behavior
+
+The current parser:
+
+1. Requires manifest version 1.
+2. Rejects unknown fields.
+3. Validates experiment names.
+4. Limits description length.
+5. Rejects absolute and parent-traversal working-directory paths.
+6. Validates environment variable names.
+7. Returns a field-specific parsing or validation error where available.
+
+Manifest values are treated as data. Phase 1 does not execute commands, install dependencies, or launch workloads.
 
 ## Secrets and host-specific values
 
-Secrets must not be committed in manifests or exported packages by default. Future secret references should identify an external secret provider or environment variable by name, not store the secret value itself.
+Do not commit secrets in manifests or exported packages. Future secret references should identify an external secret provider or environment variable by name, not store the secret value itself.
 
-Machine-specific paths, credentials, and private environment values must be excluded from portable exports unless the user explicitly selects a safe, documented inclusion mechanism.
+Machine-specific paths and private environment values must be excluded from portable exports unless the user explicitly selects a safe, documented inclusion mechanism.
 
 ## Stability
 
-The manifest format should be considered experimental until implementation, schema tests, and migration rules are complete. A stable format requires a documented compatibility policy.
+The manifest format remains experimental until schema tests, migration rules, and compatibility guarantees are complete. Changes to a future stable format must be versioned and documented.
