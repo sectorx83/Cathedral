@@ -1,4 +1,7 @@
-use std::{collections::HashSet, path::{Path, PathBuf}};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{bail, Context, Result};
 use cathedral_core::{
@@ -131,7 +134,7 @@ fn main() -> Result<()> {
                             item.name
                         )),
                         }
-                    },
+                    }
                     Err(error) => issues.push(format!(
                         "experiment '{}' has an invalid workspace: {error}",
                         item.name
