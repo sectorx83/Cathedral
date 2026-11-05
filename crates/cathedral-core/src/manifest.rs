@@ -51,6 +51,9 @@ pub struct ResourceSection {
     /// Maximum number of processes/threads in the experiment cgroup.
     #[serde(default)]
     pub pids_max: Option<u32>,
+    /// Optional maximum run duration in seconds. Requires GNU coreutils timeout.
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields)]
@@ -158,6 +161,9 @@ impl Manifest {
         }
         if self.resources.pids_max == Some(0) {
             return Err(CathedralError::Manifest("resources.pids_max must be greater than zero".to_owned()));
+        }
+        if self.resources.timeout_seconds.is_some_and(|value| value == 0 || value > 604800) {
+            return Err(CathedralError::Manifest("resources.timeout_seconds must be between 1 and 604800".to_owned()));
         }
         for (name, requirement) in &self.dependencies.packages {
             let valid_name = !name.is_empty()
@@ -285,6 +291,9 @@ mod tests {
         assert!(manifest.validate().is_err());
         manifest.resources.cpu_quota_percent = Some(100);
         manifest.resources.pids_max = Some(0);
+        assert!(manifest.validate().is_err());
+        manifest.resources.pids_max = None;
+        manifest.resources.timeout_seconds = Some(604801);
         assert!(manifest.validate().is_err());
     }
 
