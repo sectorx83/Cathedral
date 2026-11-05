@@ -43,11 +43,11 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 - Unit and integration tests pass on the supported Phase 1 CI targets.
 - Setup, architecture, and CLI documentation match the implemented behavior.
 
-**Not included:** running arbitrary workloads, claiming sandbox isolation, live observability, snapshots, export/import, or the desktop application.
+**Not included:** Windows/macOS workload backends, configurable network allowlists, disk quotas, network traffic accounting, a background observability daemon, or the desktop application.
 
 ## Phase 2: Isolation & Observatory
 
-**Status: In progress (Linux beta backend implemented).** Linux execution now uses Bubblewrap namespaces and a restricted filesystem view. Optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor (including watch mode), process inspection, logs, and stop, with procfs/cgroup resource samples and a JSONL history. Windows and macOS workload backends and streaming desktop observability remain outstanding.
+**Status: Complete for the Linux beta backend.** Linux execution uses Bubblewrap namespaces and a restricted filesystem view, network access is denied by default, and optional hard memory, CPU, and process-count limits use delegated cgroup v2. The CLI supports run, monitor (including watch mode), process inspection, logs, and stop, with procfs/cgroup resource samples, exit diagnostics, timeout enforcement, and JSONL history. Windows and macOS runtime backends are explicitly unsupported and remain future work; desktop streaming observability belongs to Phase 4.
 
 **Objective:** Execute experiments under explicit, inspectable resource and isolation policies.
 
@@ -57,11 +57,11 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 - Implement the first Linux runtime using namespaces and cgroups v2 where available.
 - Apply filesystem isolation and configurable CPU and memory limits.
 - Add process lifecycle management, termination, and cleanup.
-- Add network policy controls with explicit defaults and capability reporting.
+- Deny network access by default through a network namespace and report the current limitation: configurable allowlists and host-network mode are not implemented.
 - Investigate a Windows backend using Job Objects and suitable isolation facilities.
 - Investigate a macOS backend using supported sandboxing or virtualization facilities.
 - Add observability for CPU, memory, disk activity, processes, logs, and resource history.
-- Capture runtime failures and process termination details in structured diagnostics. Exit-code collection and automatic timeout policies remain future work.
+- Capture exit codes, termination signals, and timeout outcomes; automatically clean up completed delegated cgroups and verify stop completion.
 
 ### Intended CLI surface
 
@@ -75,7 +75,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 - A workload can be started, monitored, and stopped through Cathedral on the first supported platform.
 - Enforced limits are distinguished from advisory measurements.
-- Runtime cleanup occurs after normal exit, failure, and interruption.
+- Runtime cleanup occurs after normal exit, failure, and stop; delegated cgroups are reaped automatically when the supervisor exits.
 - Unsupported isolation features fail closed or require an explicit, documented weaker mode.
 - Process, resource, and log data can be inspected without relying on the workload's cooperation.
 - Platform-specific guarantees and limitations are documented and tested.
