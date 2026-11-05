@@ -312,13 +312,15 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         supervisor
             .args([
                 "-c",
-                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; exit \"$status\"",
+                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; if [ -n \"$CATHEDRAL_CGROUP_PATH\" ]; then printf '%s\\n' \"$\" > \"$CATHEDRAL_CGROUP_PARENT/cgroup.procs\" 2>/dev/null || true; rmdir \"$CATHEDRAL_CGROUP_PATH\" 2>/dev/null || true; fi; exit \"$status\"",
                 "cathedral-supervisor",
                 "bwrap",
             ])
             .args(bwrap_args)
             .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
             .env("CATHEDRAL_TIMEOUT_SECONDS", manifest.resources.timeout_seconds.map(|value| value.to_string()).unwrap_or_default())
+            .env("CATHEDRAL_CGROUP_PATH", cgroup_path.as_ref().map(|path| path.as_os_str()).unwrap_or_default())
+            .env("CATHEDRAL_CGROUP_PARENT", cgroup_path.as_ref().and_then(|path| path.parent()).map(|path| path.as_os_str()).unwrap_or_default())
             .stdin(Stdio::null())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));
@@ -502,6 +504,14 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
                 fs::write(kill_file, "1")?;
                 if !record.exit_status_file.is_empty() {
                     let _ = fs::write(&record.exit_status_file, "signal:SIGTERM\n");
+                }
+                for _ in 0..100 {
+                    let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
+                    if members.trim().is_empty() {
+                        let _ = fs::remove_dir(path);
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                 }
                 return Ok(());
             }
