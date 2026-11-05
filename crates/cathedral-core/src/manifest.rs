@@ -137,10 +137,7 @@ impl Manifest {
             let valid_name = !name.is_empty()
                 && name.len() <= 128
                 && name.bytes().all(|byte| {
-                    byte.is_ascii_alphanumeric()
-                        || byte == b'-'
-                        || byte == b'_'
-                        || byte == b'.'
+                    byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || byte == b'.'
                 });
             if !valid_name {
                 return Err(CathedralError::Manifest(format!(

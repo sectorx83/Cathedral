@@ -103,12 +103,19 @@ fn cli_rejects_invalid_names_without_creating_a_workspace() {
 #[test]
 fn cli_rejects_duplicate_names_without_creating_an_orphan_workspace() {
     let home = tempfile::tempdir().unwrap();
-    assert!(cathedral(home.path(), &["create", "duplicate-lab"]).status.success());
+    assert!(cathedral(home.path(), &["create", "duplicate-lab"])
+        .status
+        .success());
 
     let duplicate = cathedral(home.path(), &["create", "duplicate-lab"]);
     assert!(!duplicate.status.success());
     assert!(String::from_utf8_lossy(&duplicate.stderr).contains("already exists"));
-    assert_eq!(fs::read_dir(home.path().join("experiments")).unwrap().count(), 1);
+    assert_eq!(
+        fs::read_dir(home.path().join("experiments"))
+            .unwrap()
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -138,6 +145,10 @@ fn cli_uses_cathedral_home_environment_override() {
         .arg("init")
         .output()
         .unwrap();
-    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     assert!(home.path().join("cathedral.sqlite3").exists());
 }
