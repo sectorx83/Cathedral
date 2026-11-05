@@ -312,12 +312,13 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         supervisor
             .args([
                 "-c",
-                "bwrap \"$@\"; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; exit \"$status\"",
+                "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; exit \"$status\"",
                 "cathedral-supervisor",
                 "bwrap",
             ])
             .args(bwrap_args)
             .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
+            .env("CATHEDRAL_TIMEOUT_SECONDS", manifest.resources.timeout_seconds.map(|value| value.to_string()).unwrap_or_default())
             .stdin(Stdio::null())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));
