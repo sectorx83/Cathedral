@@ -9,3 +9,9 @@ working_directory = "."
 
 [environment.variables]
 RUST_LOG = "info"
+
+# Optional Linux cgroup v2 hard limits. Configure CATHEDRAL_CGROUP_ROOT first.
+# [resources]
+# memory_max_bytes = 536870912
+# cpu_quota_percent = 100
+# pids_max = 128
