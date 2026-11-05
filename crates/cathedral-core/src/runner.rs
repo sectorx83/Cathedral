@@ -985,6 +985,31 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn enforces_manifest_timeout_and_records_timeout_exit() {
+        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success())
+            || !Command::new("timeout").arg("--help").output().is_ok_and(|out| out.status.success()) {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let mut manifest = Manifest::minimal("timeout-test");
+        manifest.resources.timeout_seconds = Some(1);
+        manifest.write_to(&workspace.join("cathedral.toml")).unwrap();
+        let run_root = temp.path().join("data").join("runs").join("timeout-test");
+        fs::create_dir_all(run_root.parent().unwrap()).unwrap();
+        let record = launch(&workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        for _ in 0..300 {
+            if process_state(&record) == ProcessState::Finished { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(process_state(&record), ProcessState::Finished);
+        assert!(timed_out(&record));
+        cleanup_finished(&record).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn refuses_to_stop_a_reused_process_identifier() {
         let record = RunRecord {
             id: "test-run".to_owned(),
