@@ -43,7 +43,8 @@ are sampled from procfs.
 
 - `run` stores a run ID, process identity, command, and combined output log.
 - `monitor` reports process state, virtual/resident memory, CPU ticks, disk
-  I/O counters, and cgroup aggregate metrics when available.
+  I/O counters, and cgroup aggregate metrics when available. Use `--watch`
+  for repeated sampling and `--interval-seconds` to set the sample interval.
 - `processes` lists recorded runs and their current resource samples.
 - `logs` reads the combined stdout/stderr log for a selected or latest run.
 - `stop` sends termination to the run's cgroup when available, otherwise to
