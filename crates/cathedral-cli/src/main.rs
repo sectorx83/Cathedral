@@ -165,7 +165,11 @@ fn main() -> Result<()> {
                     println!("Process metrics: unavailable (workload exited)");
                 }
                 if runner::process_state(record) == runner::ProcessState::Finished {
-                    if let Some(code) = runner::exit_status(record) { println!("Exit code: {code}"); }
+                    if let Some(code) = runner::exit_status(record) {
+                        println!("Exit code: {code}");
+                    } else if let Some(signal) = runner::termination_signal(record) {
+                        println!("Terminated by {signal}");
+                    }
                 }
                 if !watch || runner::process_state(record) != runner::ProcessState::Running { break; }
                 std::thread::sleep(std::time::Duration::from_secs(interval_seconds));
