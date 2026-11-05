@@ -47,7 +47,13 @@ enum Command {
         command: Vec<String>,
     },
     /// Show the latest workload state and resource measurements.
-    Monitor { name: String },
+    Monitor {
+        name: String,
+        #[arg(long)]
+        watch: bool,
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u64).range(1..))]
+        interval_seconds: u64,
+    },
     /// Display captured workload output. Defaults to the latest run.
     Logs { name: String, run_id: Option<String> },
     /// List workload processes and their current resource measurements.
@@ -137,34 +143,27 @@ fn main() -> Result<()> {
             println!("Command: {}", record.command.join(" "));
             println!("Logs: {}", record.log_file);
         }
-        Command::Monitor { name } => {
+        Command::Monitor { name, watch, interval_seconds } => {
             let item = inspect_experiment(&root, &name)?;
             let workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let records = runner::list_runs(&workspace)?;
             let record = records.last().ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
-            println!("Run: {}", record.id);
-            println!("PID: {}", record.pid);
-            runner::cleanup_finished(record)?;
-            println!("State: {}", runner::process_state(record).label());
-            println!("Started (Unix): {}", record.started_at);
-            if let Some(metrics) = runner::metrics(record)? {
-                println!("Process state: {}", metrics.state);
-                println!("Parent PID: {}", metrics.parent_pid);
-                println!("Virtual memory: {} KiB", metrics.virtual_memory_kb);
-                println!("Resident memory: {} KiB", metrics.resident_memory_kb);
-                println!("CPU time: {} ticks (user), {} ticks (system)", metrics.user_cpu_ticks, metrics.system_cpu_ticks);
-                println!("Disk I/O: {} bytes read, {} bytes written", metrics.read_bytes, metrics.write_bytes);
-                if let Some(value) = metrics.cgroup_memory_current_bytes {
-                    println!("Cgroup memory: {} bytes", value);
+            loop {
+                runner::cleanup_finished(record)?;
+                println!("Run: {} | PID: {} | State: {}", record.id, record.pid, runner::process_state(record).label());
+                if let Some(metrics) = runner::metrics(record)? {
+                    println!("Process: {} | Parent PID: {}", metrics.state, metrics.parent_pid);
+                    println!("Memory: {} KiB RSS / {} KiB virtual", metrics.resident_memory_kb, metrics.virtual_memory_kb);
+                    println!("CPU: {} user ticks / {} system ticks", metrics.user_cpu_ticks, metrics.system_cpu_ticks);
+                    println!("Disk I/O: {} bytes read / {} bytes written", metrics.read_bytes, metrics.write_bytes);
+                    if let Some(value) = metrics.cgroup_memory_current_bytes { println!("Cgroup memory: {} bytes", value); }
+                    if let Some(value) = metrics.cgroup_cpu_usage_usec { println!("Cgroup CPU time: {} microseconds", value); }
+                    if let Some(value) = metrics.cgroup_process_count { println!("Cgroup processes: {}", value); }
+                } else {
+                    println!("Process metrics: unavailable (workload exited)");
                 }
-                if let Some(value) = metrics.cgroup_cpu_usage_usec {
-                    println!("Cgroup CPU time: {} microseconds", value);
-                }
-                if let Some(value) = metrics.cgroup_process_count {
-                    println!("Cgroup processes: {}", value);
-                }
-            } else {
-                println!("Process metrics: unavailable (process exited or identity changed)");
+                if !watch || runner::process_state(record) != runner::ProcessState::Running { break; }
+                std::thread::sleep(std::time::Duration::from_secs(interval_seconds));
             }
         }
         Command::Logs { name, run_id } => {
@@ -182,15 +181,18 @@ fn main() -> Result<()> {
             if records.is_empty() {
                 println!("No workload runs recorded.");
             } else {
-                println!("{:<36} {:<10} {:<10} {:>12} {:>12}", "RUN ID", "PID", "STATE", "RSS (KiB)", "READ (B)");
+                println!("{:<36} {:<10} {:<12} {:>12} {:>12}", "RUN ID", "PID", "STATE", "RSS (KiB)", "READ (B)");
                 for record in records {
                     runner::cleanup_finished(&record)?;
                     let state = runner::process_state(&record);
-                    let metrics = runner::metrics(&record)?;
-                    println!("{:<36} {:<10} {:<10} {:>12} {:>12}",
-                        record.id, record.pid, state.label(),
-                        metrics.as_ref().map(|m| m.resident_memory_kb).unwrap_or(0),
-                        metrics.as_ref().map(|m| m.read_bytes).unwrap_or(0));
+                    let processes = runner::processes(&record)?;
+                    if processes.is_empty() {
+                        println!("{:<36} {:<10} {:<12} {:>12} {:>12}", record.id, record.pid, state.label(), 0, 0);
+                    } else {
+                        for process in processes {
+                            println!("{:<36} {:<10} {:<12} {:>12} {:>12}", record.id, process.pid, process.state, process.resident_memory_kb, process.read_bytes);
+                        }
+                    }
                 }
             }
         }
