@@ -413,7 +413,9 @@ pub fn process_state(record: &RunRecord) -> ProcessState {
             if record.supervisor_start_ticks != 0 && ticks != record.supervisor_start_ticks {
                 return ProcessState::ProcessIdentityChanged;
             }
-            return ProcessState::Running;
+            if !matches!(proc_state(supervisor_pid), Some('Z' | 'X')) {
+                return ProcessState::Running;
+            }
         }
         if let Some(path) = &record.cgroup_path {
             let members = fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).unwrap_or_default();
@@ -653,6 +655,12 @@ fn wait_for_workload_pid(supervisor_pid: u32) -> Option<u32> {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     None
+}
+#[cfg(target_os = "linux")]
+fn proc_state(pid: u32) -> Option<char> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let (_, rest) = stat.rsplit_once(") ")?;
+    rest.chars().next()
 }
 #[cfg(target_os = "linux")]
 fn proc_start_ticks(pid: u32) -> Option<u64> {
