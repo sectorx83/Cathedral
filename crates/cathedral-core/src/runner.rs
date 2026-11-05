@@ -1042,7 +1042,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn enforces_manifest_timeout_and_records_timeout_exit() {
-        if !Command::new("bwrap").arg("--version").output().is_ok_and(|out| out.status.success())
+        if !bubblewrap_works()
             || !Command::new("timeout").arg("--help").output().is_ok_and(|out| out.status.success()) {
             return;
         }
