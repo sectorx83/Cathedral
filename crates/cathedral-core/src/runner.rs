@@ -247,7 +247,15 @@ pub fn launch(workspace: &Path, command: &[String]) -> Result<RunRecord> {
         };
         let encoded = serde_json::to_vec_pretty(&record)
             .map_err(|error| CathedralError::Manifest(error.to_string()))?;
-        atomic_write(&directory.join("run.json"), &encoded)?;
+        if let Err(error) = atomic_write(&directory.join("run.json"), &encoded) {
+            if let Some(path) = &record.cgroup_path {
+                let _ = fs::write(PathBuf::from(path).join("cgroup.kill"), "1");
+                let _ = fs::remove_dir(path);
+            } else {
+                let _ = Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).status();
+            }
+            return Err(error);
+        }
         Ok(record)
     }
 }
@@ -331,6 +339,9 @@ pub fn stop(workspace: &Path, run_id: &str) -> Result<()> {
                 return Err(CathedralError::Manifest("refusing to signal a reused PID".to_owned()));
             }
             ProcessState::Running => {}
+        }
+        if record.process_start_ticks == 0 && record.cgroup_path.is_none() {
+            return Err(CathedralError::Manifest("cannot verify workload PID identity; refusing to signal a possibly reused PID".to_owned()));
         }
         if let Some(path) = &record.cgroup_path {
             let kill_file = PathBuf::from(path).join("cgroup.kill");
