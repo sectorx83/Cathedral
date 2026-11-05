@@ -125,10 +125,10 @@ pub fn verify(root:&Path,name:&str,id:&str)->Result<Summary>{
  for e in &m.entries{let p=files.join(relative(&e.path)?);let a=fs::symlink_metadata(&p)?;
   if a.file_type().is_symlink(){return Err(err(format!("symlink in snapshot: {}",e.path)))}
   match e.kind{EntryKind::Directory if a.is_dir()=>{},EntryKind::File if a.is_file()=>{let(n,h)=hash(&p)?;if n!=e.size||Some(h)!=e.sha256{return Err(err(format!("integrity failure: {}",e.path)))}}_=>return Err(err(format!("missing or wrong-type entry: {}",e.path)))}
- }Ok(summary(&m))
+ }validate_lockfile(&files.join("cathedral.lock"),&m)?;Ok(summary(&m))
 }
 pub fn compare(root:&Path,name:&str,a:&str,b:&str)->Result<Vec<Difference>>{
- let(_,x)=load(root,name,a)?;let(_,y)=load(root,name,b)?;
+ verify(root,name,a)?;verify(root,name,b)?;let(_,x)=load(root,name,a)?;let(_,y)=load(root,name,b)?;
  let left:std::collections::BTreeMap<_,_>=x.entries.iter().map(|e|(e.path.as_str(),e)).collect();
  let right:std::collections::BTreeMap<_,_>=y.entries.iter().map(|e|(e.path.as_str(),e)).collect();let mut out=Vec::new();
  for(p,e)in &right{match left.get(p){None=>out.push(Difference{path:(*p).into(),change:"added".into()}),Some(old)if old.kind!=e.kind||old.size!=e.size||old.sha256!=e.sha256=>out.push(Difference{path:(*p).into(),change:"changed".into()}),_=>{}}}
@@ -159,7 +159,7 @@ fn package_read(path:&Path,stage:&Path)->Result<Metadata>{
  let mut json=vec![0;n as usize];i.read_exact(&mut json)?;let m:Metadata=serde_json::from_slice(&json).map_err(|e|err(format!("invalid package metadata: {e}")))?;validate(&m)?;
  let mut total=0u64;for e in &m.entries{let r=relative(&e.path)?;let d=stage.join(r);match e.kind{EntryKind::Directory=>fs::create_dir_all(d)?,EntryKind::File=>{total=total.saturating_add(e.size);if total>MAX_TOTAL{return Err(err("package exceeds 16 GiB limit"))}if let Some(p)=d.parent(){fs::create_dir_all(p)?}let mut o=OpenOptions::new().write(true).create_new(true).open(&d)?;let mut left=e.size;let mut h=Sha256::new();let mut b=[0;65536];while left>0{let k=left.min(b.len()as u64)as usize;i.read_exact(&mut b[..k])?;o.write_all(&b[..k])?;h.update(&b[..k]);left-=k as u64;}o.sync_all()?;if Some(format!("{:x}",h.finalize()))!=e.sha256{return Err(err(format!("package integrity failure: {}",e.path)))}}}}
  let mut extra=[0];if i.read(&mut extra)?!=0{return Err(err("unexpected trailing package data"))}
- if Manifest::load(&stage.join("cathedral.toml"))?!=m.manifest{return Err(err("embedded manifest does not match package metadata"))}Ok(m)
+ if Manifest::load(&stage.join("cathedral.toml"))?!=m.manifest{return Err(err("embedded manifest does not match package metadata"))}validate_lockfile(&stage.join("cathedral.lock"),&m)?;Ok(m)
 }
 pub fn import(root:&Path,package:&Path,strict:bool)->Result<PackageReport>{
  fs::create_dir_all(root.join("imports"))?;let stage=root.join("imports").join(Uuid::new_v4().to_string());fs::create_dir(&stage)?;
