@@ -34,9 +34,9 @@ Potential threats include filesystem traversal, symlink attacks, privilege escal
 
 ## Implemented Linux runtime boundary
 
-The Linux runner uses Bubblewrap to create user, PID, IPC, UTS, and network namespaces. It presents `/usr` and `/etc` read-only, mounts the experiment workspace writable, mounts `/tmp` as temporary storage, and clears the inherited environment before setting a small allowlist plus manifest variables. Network access is disabled by default. Optional memory, CPU, and process-count ceilings are applied using cgroup v2 only when a delegated cgroup root is configured and all requested controller files accept the settings. A failed requested limit prevents launch.
+The Linux runner uses Bubblewrap to create user, PID, IPC, UTS, and network namespaces. It presents `/usr` read-only, creates a restricted `/etc` containing only selected read-only configuration files, mounts the experiment workspace writable, mounts `/tmp` as temporary storage, and clears the inherited environment before setting a small allowlist plus manifest variables. Network access is disabled by default. Optional memory, CPU, and process-count ceilings are applied using cgroup v2 only when a delegated cgroup root is configured and all requested controller files accept the settings. A failed requested limit prevents launch.
 
-The runner records process identity, combined stdout/stderr, and resource samples. Process and cgroup cleanup is best-effort and reports failures. A kernel vulnerability, a Bubblewrap or kernel configuration defect, or an incorrectly delegated cgroup can still undermine containment. The implementation has not been independently security audited.
+The runner records process identity, combined stdout/stderr, exit outcomes, and resource samples. A detached reaper removes empty delegated cgroups after supervisor exit; explicit stop waits for process termination and reports cleanup failures. A kernel vulnerability, a Bubblewrap or kernel configuration defect, or an incorrectly delegated cgroup can still undermine containment. The implementation has not been independently security audited.
 
 Windows and macOS do not yet have workload backends. Their CLI runtime commands return an unsupported-platform error rather than silently running workloads without isolation.
 
