@@ -413,7 +413,8 @@ while [ -r "/proc/$pid/stat" ]; do
     stat=$(cat "/proc/$pid/stat" 2>/dev/null) || break
     rest=${stat##*) }
     set -- $rest
-    actual=${20}
+    shift 19
+    actual=$1
     [ "$actual" = "$expected" ] || break
     sleep 0.1
 done
@@ -425,6 +426,9 @@ while [ -r "$cgroup/cgroup.procs" ] && [ -n "$(cat "$cgroup/cgroup.procs")" ] &&
     count=$((count + 1))
 done
 if [ -r "$cgroup/cgroup.procs" ] && [ -z "$(cat "$cgroup/cgroup.procs")" ]; then
+    # In the test fixture cgroup.procs is a normal file; on cgroupfs it is a
+    # virtual control file and unlink is rejected harmlessly by the kernel.
+    rm -f "$cgroup/cgroup.procs" 2>/dev/null || true
     rmdir "$cgroup" 2>/dev/null || true
 fi
 "#;
