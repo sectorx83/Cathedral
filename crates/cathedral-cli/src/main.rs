@@ -58,7 +58,7 @@ enum Command {
     Logs { name: String, run_id: Option<String> },
     /// List workload processes and their current resource measurements.
     Processes { name: String },
-    /// Stop a workload process group by run identifier.
+    /// Stop a workload and verify process cleanup by run identifier.
     Stop { name: String, run_id: String },
 }
 
