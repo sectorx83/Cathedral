@@ -26,6 +26,7 @@ impl ProbeStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeProbe {
     pub unshare_binary: ProbeStatus,
+    pub bubblewrap: ProbeStatus,
     pub user_pid_mount_namespaces: ProbeStatus,
     pub network_namespace: ProbeStatus,
     pub cgroup_v2: ProbeStatus,
@@ -44,6 +45,7 @@ impl RuntimeProbe {
         {
             Self {
                 unshare_binary: ProbeStatus::NotApplicable,
+                bubblewrap: ProbeStatus::NotApplicable,
                 user_pid_mount_namespaces: ProbeStatus::NotApplicable,
                 network_namespace: ProbeStatus::NotApplicable,
                 cgroup_v2: ProbeStatus::NotApplicable,
@@ -56,6 +58,7 @@ impl RuntimeProbe {
 
 #[cfg(target_os = "linux")]
 fn inspect_linux() -> RuntimeProbe {
+    let bubblewrap = Command::new("bwrap").arg("--version").output().is_ok_and(|output| output.status.success());
     let unshare_installed = Command::new("unshare")
         .arg("--version")
         .output()
@@ -82,6 +85,7 @@ fn inspect_linux() -> RuntimeProbe {
         ProbeStatus::Unavailable
     };
     RuntimeProbe {
+        bubblewrap: if bubblewrap { ProbeStatus::Available } else { ProbeStatus::Unavailable },
         unshare_binary: if unshare_installed {
             ProbeStatus::Available
         } else {
@@ -142,6 +146,7 @@ mod tests {
     fn probe_result_has_a_status_for_every_capability() {
         let result = RuntimeProbe::inspect();
         assert!(!result.unshare_binary.label().is_empty());
+        assert!(!result.bubblewrap.label().is_empty());
         assert!(!result.user_pid_mount_namespaces.label().is_empty());
         assert!(!result.network_namespace.label().is_empty());
         assert!(!result.cgroup_v2.label().is_empty());
