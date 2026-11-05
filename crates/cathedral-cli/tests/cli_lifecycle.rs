@@ -92,7 +92,7 @@ fn cli_rejects_invalid_names_without_creating_a_workspace() {
     let result = cathedral(home.path(), &["create", "Uppercase"]);
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("invalid experiment name"));
-    assert_eq!(fs::read_dir(home.path().join("experiments")).unwrap().count(), 0);
+    assert_eq!(\n        fs::read_dir(home.path().join("experiments"))\n            .map(|entries| entries.count())\n            .unwrap_or(0),\n        0\n    );
 }
 
 #[test]
