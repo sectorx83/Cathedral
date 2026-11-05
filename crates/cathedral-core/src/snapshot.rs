@@ -19,6 +19,14 @@ pub struct Entry { pub path:String, pub kind:EntryKind, pub size:u64, pub sha256
 #[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Host { pub os:String, pub arch:String }
 #[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
+pub struct Lockfile {
+ pub format_version:u32,
+ pub manifest_sha256:String,
+ pub host:Host,
+ pub runtime_backend:String,
+ pub dependencies:std::collections::BTreeMap<String,String>,
+}
+#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
 pub struct Metadata {
  pub version:u32, pub snapshot_id:String, pub experiment_id:String, pub name:String,
  pub created_at:i64, pub manifest:Manifest, pub host:Host, pub entries:Vec<Entry>
@@ -70,6 +78,14 @@ fn validate(m:&Metadata)->Result<()>{
   }
  }if total>MAX_TOTAL{return Err(err("snapshot exceeds 16 GiB limit"))}Ok(())
 }
+fn lockfile_for(manifest:&Manifest,host:&Host)->Result<Lockfile>{
+ let canonical=toml::to_string_pretty(manifest).map_err(|e|err(e.to_string()))?;
+ Ok(Lockfile{format_version:1,manifest_sha256:format!("{:x}",Sha256::digest(canonical.as_bytes())),host:host.clone(),runtime_backend:if host.os=="linux"{"bubblewrap-linux".into()}else{"unsupported".into()},dependencies:manifest.dependencies.packages.clone()})
+}
+fn validate_lockfile(path:&Path,m:&Metadata)->Result<()>{
+ let lock:Lockfile=serde_json::from_slice(&fs::read(path)?).map_err(|e|err(format!("invalid cathedral.lock: {e}")))?;
+ if lock!=lockfile_for(&m.manifest,&m.host)?{return Err(err("cathedral.lock does not match manifest, dependencies, or host requirements"))}Ok(())
+}
 fn summary(m:&Metadata)->Summary{Summary{id:m.snapshot_id.clone(),name:m.name.clone(),files:m.entries.iter().filter(|e|e.kind==EntryKind::File).count(),directories:m.entries.iter().filter(|e|e.kind==EntryKind::Directory).count(),bytes:m.entries.iter().map(|e|e.size).sum(),created_at:m.created_at}}
 fn metadata(path:&Path)->Result<Metadata>{
  let f=fs::symlink_metadata(path)?;if f.file_type().is_symlink()||!f.is_file()||f.len()>MAX_META{return Err(err("unsafe or oversized snapshot metadata"))}
@@ -80,8 +96,14 @@ pub fn create(root:&Path,name:&str)->Result<Summary>{
  let manifest=Manifest::load(&ws.join("cathedral.toml"))?;let id=Uuid::new_v4().to_string();let dir=snaproot(root,&exp.id).join(&id);
  fs::create_dir_all(dir.join("files"))?;
  let result=(||->Result<Metadata>{
-  let mut entries=Vec::new();copy_tree(&ws,&dir.join("files"),Path::new(""),&mut entries)?;entries.sort_by(|a,b|a.path.cmp(&b.path));
-  let p=PlatformInfo::detect();let m=Metadata{version:VERSION,snapshot_id:id.clone(),experiment_id:exp.id.clone(),name:exp.name.clone(),created_at:crate::registry::unix_timestamp(),manifest,host:Host{os:p.operating_system.into(),arch:p.architecture.into()},entries};validate(&m)?;
+   let mut entries=Vec::new();copy_tree(&ws,&dir.join("files"),Path::new(""),&mut entries)?;
+   let p=PlatformInfo::detect();let host=Host{os:p.operating_system.into(),arch:p.architecture.into()};
+   let lock=lockfile_for(&manifest,&host)?;let lock_path=dir.join("files").join("cathedral.lock");
+   fs::write(&lock_path,serde_json::to_vec_pretty(&lock).map_err(|e|err(e.to_string()))?)?;
+   entries.retain(|entry|entry.path!="cathedral.lock");let(lock_size,lock_hash)=hash(&lock_path)?;
+   entries.push(Entry{path:"cathedral.lock".into(),kind:EntryKind::File,size:lock_size,sha256:Some(lock_hash)});
+   entries.sort_by(|a,b|a.path.cmp(&b.path));
+   let m=Metadata{version:VERSION,snapshot_id:id.clone(),experiment_id:exp.id.clone(),name:exp.name.clone(),created_at:crate::registry::unix_timestamp(),manifest,host,entries};validate(&m)?;
   let tmp=dir.join("metadata.tmp");let mut f=OpenOptions::new().write(true).create_new(true).open(&tmp)?;f.write_all(&serde_json::to_vec_pretty(&m).map_err(|e|err(e.to_string()))?)?;f.sync_all()?;drop(f);fs::rename(tmp,dir.join("snapshot.json"))?;Ok(m)
  })();
  match result{Ok(m)=>Ok(summary(&m)),Err(e)=>{let _=fs::remove_dir_all(dir);Err(e)}}
@@ -154,6 +176,6 @@ pub fn import(root:&Path,package:&Path,strict:bool)->Result<PackageReport>{
 mod tests{
  use super::*;use tempfile::tempdir;
  #[test]fn snapshot_verify_compare_restore(){let t=tempdir().unwrap();let e=create_experiment(t.path(),"snap-lab",Manifest::minimal("snap-lab")).unwrap();let w=Path::new(&e.workspace_path);fs::write(w.join("a.txt"),"one").unwrap();let a=create(t.path(),"snap-lab").unwrap();fs::write(w.join("a.txt"),"two").unwrap();fs::write(w.join("b.txt"),"new").unwrap();let b=create(t.path(),"snap-lab").unwrap();assert!(verify(t.path(),"snap-lab",&a.id).is_ok());let d=compare(t.path(),"snap-lab",&a.id,&b.id).unwrap();assert!(d.iter().any(|x|x.path=="a.txt"&&x.change=="changed"));assert!(d.iter().any(|x|x.path=="b.txt"&&x.change=="added"));restore(t.path(),"snap-lab",&a.id).unwrap();assert_eq!(fs::read_to_string(w.join("a.txt")).unwrap(),"one");assert!(!w.join("b.txt").exists());}
- #[test]fn package_roundtrip(){let a=tempdir().unwrap();let b=tempdir().unwrap();let e=create_experiment(a.path(),"portable-lab",Manifest::minimal("portable-lab")).unwrap();fs::write(Path::new(&e.workspace_path).join("data.txt"),"portable").unwrap();let p=a.path().join("test.cath");export(a.path(),"portable-lab",&p).unwrap();let r=import(b.path(),&p,true).unwrap();assert!(r.compatible);let x=inspect_experiment(b.path(),"portable-lab").unwrap();assert_eq!(fs::read_to_string(Path::new(&x.workspace_path).join("data.txt")).unwrap(),"portable");}
+ #[test]fn package_roundtrip(){let a=tempdir().unwrap();let b=tempdir().unwrap();let e=create_experiment(a.path(),"portable-lab",Manifest::minimal("portable-lab")).unwrap();fs::write(Path::new(&e.workspace_path).join("data.txt"),"portable").unwrap();let p=a.path().join("test.cath");export(a.path(),"portable-lab",&p).unwrap();let r=import(b.path(),&p,true).unwrap();assert!(r.compatible);let x=inspect_experiment(b.path(),"portable-lab").unwrap();assert_eq!(fs::read_to_string(Path::new(&x.workspace_path).join("data.txt")).unwrap(),"portable");assert!(Path::new(&x.workspace_path).join("cathedral.lock").is_file());}
  #[test]fn detects_corruption(){let t=tempdir().unwrap();let e=create_experiment(t.path(),"hash-lab",Manifest::minimal("hash-lab")).unwrap();fs::write(Path::new(&e.workspace_path).join("x"),"good").unwrap();let s=create(t.path(),"hash-lab").unwrap();fs::write(snaproot(t.path(),&e.id).join(&s.id).join("files/x"),"bad").unwrap();assert!(verify(t.path(),"hash-lab",&s.id).is_err());}
 }
