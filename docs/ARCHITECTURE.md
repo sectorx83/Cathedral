@@ -6,37 +6,46 @@ Cathedral is an experiment-management and reproducibility platform. Its architec
 
 The central rule is that the shared core owns the domain model and policy decisions, while platform backends own operating-system interactions. A platform backend must report what it can actually enforce.
 
-## 2. Architectural layers
+## 2. Current Phase 1 structure
+
+The implemented Rust workspace contains two crates:
+
+- **cathedral-core:** manifest validation, experiment lifecycle services, SQLite registry, managed workspace operations, host identification, and platform capability contracts.
+- **cathedral CLI:** argument parsing and terminal presentation. It delegates domain operations to cathedral-core.
+
+The current implementation manages metadata and workspace directories. It does not execute experiments or provide workload isolation.
+
+## 3. Architectural layers
 
 ### Shared core
 
 The shared core defines:
 
 - Experiment identifiers and metadata.
-- Experiment lifecycle states and valid transitions.
+- Experiment lifecycle operations.
 - Manifest parsing and validation.
 - Workspace layout and safe path handling.
-- Configuration and capability models.
-- Registry interfaces and domain-level errors.
-- Versioned data formats used by other components.
+- Host platform and architecture detection.
+- Platform capability contracts.
+- Registry persistence and domain-level errors.
 
-The core should not directly invoke Linux namespaces, Windows Job Objects, or macOS sandbox APIs.
+The core does not directly invoke Linux namespaces, Windows Job Objects, or macOS sandbox APIs.
 
 ### CLI
 
-The CLI is the primary Phase 1 interface. It parses arguments, loads configuration, invokes application services, and renders stable human-readable output. Machine-readable output can be added where it has a concrete use case.
-
-CLI commands should not duplicate business rules. They should call the same application services used by the future local API and desktop application.
+The CLI is the Phase 1 interface. It parses arguments, loads configuration, invokes application services, and renders stable human-readable output. CLI commands do not duplicate business rules.
 
 ### Registry and workspace manager
 
-SQLite stores local metadata such as experiment IDs, names, paths, timestamps, manifest versions, and lifecycle status. Filesystem contents remain in managed workspaces rather than being stored in the database.
+SQLite stores local metadata such as experiment IDs, names, paths, timestamps, and manifest versions. Filesystem contents remain in managed workspaces rather than being stored in the database.
 
-The registry must use schema migrations and transactions. Workspace operations must validate canonical paths, avoid following unsafe path components, and handle partial failures without corrupting registry state.
+The registry uses a schema-version marker and a unique constraint on experiment names. Workspace operations validate canonical paths and reject symlinked workspace roots and symlinked experiment directories.
 
 ### Runtime and platform backends
 
-The runtime layer owns workload launch, supervision, resource policy, and cleanup. Platform backends implement narrow interfaces for process creation, isolation, resource controls, filesystem setup, and network policy.
+The runtime layer is future work. The platform module currently detects the host and defines a backend contract. It does not claim that a native execution backend exists.
+
+Future adapters will implement narrow interfaces for process creation, isolation, resource controls, filesystem setup, and network policy.
 
 A capability model must distinguish:
 - Supported and enforced.
@@ -48,13 +57,11 @@ The runtime must never silently downgrade an enforced security setting to an adv
 
 ### Observatory
 
-The observatory collects runtime events and measurements, including process state, resource use, logs, exit status, and failures. It should identify the source and reliability of each measurement.
-
-The observatory is diagnostic infrastructure, not a security monitor that can guarantee detection of all hostile behavior.
+The observatory is planned for Phase 2. It will collect runtime events and measurements, including process state, resource use, logs, exit status, and failures. It should identify the source and reliability of each measurement.
 
 ### Snapshot and reproduction
 
-The snapshot subsystem records filesystem state and metadata with integrity verification. The reproduction subsystem validates package contents, dependencies, platform requirements, and compatibility before rebuilding an experiment.
+The snapshot subsystem is planned for Phase 3. It will record filesystem state and metadata with integrity verification. The reproduction subsystem will validate package contents, dependencies, platform requirements, and compatibility before rebuilding an experiment.
 
 Filesystem checkpointing must remain distinct from VM snapshots and live process-state capture.
 
@@ -62,39 +69,7 @@ Filesystem checkpointing must remain distinct from VM snapshots and live process
 
 A local API is planned for communication between the CLI, background runtime services, and the Tauri desktop application. Axum and WebSockets are the current technology direction.
 
-The API must bind only to an appropriately protected local interface by default, authenticate local clients where necessary, validate all requests, and avoid exposing privileged operations to arbitrary remote callers.
-
-Studio is a client of the same application services, not a second implementation of Cathedral's domain logic.
-
-## 3. Proposed repository structure
-
-The exact crate boundaries may evolve as implementation reveals real dependencies. Avoid empty crates created only to make the tree look complete.
-
-```text
-cathedral/
-├── crates/
-│   ├── cathedral-core/          # domain types, validation, shared contracts
-│   ├── cathedral-cli/           # command-line interface
-│   ├── cathedral-registry/      # SQLite persistence
-│   ├── cathedral-workspace/     # managed workspace operations
-│   ├── cathedral-runtime/       # runtime orchestration
-│   ├── cathedral-platform/      # platform capability contracts
-│   ├── cathedral-observatory/   # measurements and diagnostics
-│   ├── cathedral-snapshot/      # checkpoints and integrity
-│   └── cathedral-reproduce/     # export/import and reproduction
-├── studio/                      # Tauri + React + TypeScript (Phase 4)
-├── docs/
-├── examples/
-├── tests/
-├── Cargo.toml
-├── README.md
-├── ROADMAP.md
-├── SECURITY.md
-├── CONTRIBUTING.md
-└── LICENSE
-```
-
-Phase 1 should create only the crates needed for real functionality. Runtime, observatory, snapshot, and reproduction crates should be introduced when their implementation begins.
+Studio is planned for Phase 4 and will be a client of the same application services, not a second implementation of Cathedral's domain logic.
 
 ## 4. Data flow
 
@@ -112,7 +87,7 @@ Domain errors should be stable and actionable. Low-level OS errors should be pre
 
 ## 5. Manifest and compatibility
 
-Experiment configuration is versioned. Unknown required fields and unsupported schema versions must produce explicit errors. Optional extensions must not change the meaning of existing fields.
+Experiment configuration is versioned. Unknown required fields and unsupported schema versions produce explicit errors. Optional extensions must not change the meaning of existing fields.
 
 Reproduction is conditional on compatible host capabilities, architecture, dependencies, and external inputs. Cathedral should report differences rather than promise byte-for-byte identical behavior across unrelated systems.
 

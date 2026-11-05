@@ -4,20 +4,36 @@ use crate::{CathedralError, Result};
 use std::path::{Component, Path, PathBuf};
 
 pub struct Workspace {
+    data_root: PathBuf,
     root: PathBuf,
 }
 
 impl Workspace {
     pub fn new(data_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(data_dir)?;
-        let canonical_data = data_dir.canonicalize()?;
+        let data_root = data_dir.canonicalize()?;
         Ok(Self {
-            root: canonical_data.join("experiments"),
+            root: data_root.join("experiments"),
+            data_root,
         })
     }
 
     pub fn initialize(&self) -> Result<()> {
-        std::fs::create_dir_all(&self.root)?;
+        match std::fs::symlink_metadata(&self.root) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(CathedralError::UnsafePath(self.root.clone()));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                std::fs::create_dir(&self.root)?;
+            }
+            Err(error) => return Err(error.into()),
+        }
+
+        let canonical_root = self.root.canonicalize()?;
+        if canonical_root.parent() != Some(self.data_root.as_path()) {
+            return Err(CathedralError::UnsafePath(canonical_root));
+        }
         Ok(())
     }
 
@@ -36,6 +52,7 @@ impl Workspace {
     }
 
     pub fn remove(&self, path: &Path) -> Result<()> {
+        self.initialize()?;
         let root = self.root.canonicalize()?;
         if !path.is_absolute() {
             return Err(CathedralError::UnsafePath(path.to_path_buf()));
@@ -70,6 +87,24 @@ mod tests {
         workspace.initialize().unwrap();
         assert!(matches!(
             workspace.remove(temp.path()),
+            Err(CathedralError::UnsafePath(_))
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlink_workspace_root() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let outside = temp.path().join("outside");
+        std::fs::create_dir(&data).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        symlink(&outside, data.join("experiments")).unwrap();
+
+        let workspace = Workspace::new(&data).unwrap();
+        assert!(matches!(
+            workspace.initialize(),
             Err(CathedralError::UnsafePath(_))
         ));
     }

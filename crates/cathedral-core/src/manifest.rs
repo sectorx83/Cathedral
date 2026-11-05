@@ -77,15 +77,13 @@ impl Manifest {
             let relative = Path::new(path);
             if path.is_empty()
                 || relative.is_absolute()
-                || relative.components().any(|part| {
-                    matches!(
-                        part,
-                        std::path::Component::ParentDir | std::path::Component::RootDir
-                    )
-                })
+                || path.starts_with('/')
+                || path.contains('\\')
+                || path.contains(':')
+                || path.split('/').any(|part| part == "..")
             {
                 return Err(CathedralError::Manifest(format!(
-                    "working_directory must be a safe relative path, got '{path}'"
+                    "working_directory must be a portable relative path without traversal, got '{path}'"
                 )));
             }
         }
@@ -126,17 +124,20 @@ mod tests {
     #[test]
     fn accepts_valid_manifest() {
         let parsed = Manifest::parse(
-            "manifest_version = 1\n[experiment]\nname = \"demo-lab\"\ndescription = \"A test\"\n[environment]\nworking_directory = \"src\"\n[environment.variables]\nRUST_LOG = \"info\""
-        ).unwrap();
+            "manifest_version = 1\n[experiment]\nname = \"demo-lab\"\ndescription = \"A test\"\n[environment]\nworking_directory = \"src\"\n[environment.variables]\nRUST_LOG = \"info\"",
+        )
+        .unwrap();
         assert_eq!(parsed.experiment.name, "demo-lab");
     }
 
     #[test]
     fn rejects_unknown_fields_and_versions() {
-        assert!(Manifest::parse(
-            "manifest_version = 1\n[experiment]\nname = \"demo\"\nunknown = \"nope\""
-        )
-        .is_err());
+        assert!(
+            Manifest::parse(
+                "manifest_version = 1\n[experiment]\nname = \"demo\"\nunknown = \"nope\""
+            )
+            .is_err()
+        );
         let unsupported = Manifest {
             manifest_version: 99,
             ..Manifest::minimal("demo")
@@ -148,6 +149,8 @@ mod tests {
     fn rejects_traversal_and_bad_names() {
         let mut manifest = Manifest::minimal("demo");
         manifest.environment.working_directory = Some("../outside".to_owned());
+        assert!(manifest.validate().is_err());
+        manifest.environment.working_directory = Some("C:\\Windows".to_owned());
         assert!(manifest.validate().is_err());
         assert!(validate_name("../bad").is_err());
         assert!(validate_name("Uppercase").is_err());

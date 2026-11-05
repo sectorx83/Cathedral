@@ -14,3 +14,6 @@ anyhow.workspace = true
 clap.workspace = true
 cathedral-core = { path = "../cathedral-core" }
 dirs.workspace = true
+
+[dev-dependencies]
+tempfile = "3.10"
