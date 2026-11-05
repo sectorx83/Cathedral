@@ -299,6 +299,7 @@ fn main() -> Result<()> {
             );
             println!("  network namespace: {}", runtime.network_namespace.label());
             println!("  cgroup v2: {}", runtime.cgroup_v2.label());
+            println!("  cgroup.kill support: {}", runtime.cgroup_kill.label());
             println!(
                 "  cgroup CPU controller: {}",
                 runtime.cpu_controller.label()
