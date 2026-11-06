@@ -1,6 +1,6 @@
 # Phase 4: Cathedral Studio & Ecosystem
 
-**Status: In progress.** The current Phase 4 implementation includes the authenticated local API, a Tauri v2 desktop shell, and a React/TypeScript Studio client. The UI supports experiment management, isolated run controls, process telemetry, logs, read-only workspace browsing, and snapshot create/verify/compare/restore. The desktop shell is compile-checked on Linux, Windows, and macOS in CI; installers have not yet been packaged and manually validated.
+**Status: In progress.** Phase 4 now includes an authenticated local API, a Tauri v2 desktop shell, a React/TypeScript Studio client, PTY-backed Linux run input/output, terminal resize controls, live telemetry, and bounded filesystem/network-isolation/child-process probes. CI now contains platform-specific installer install/removal smoke steps. Real sandbox/PTY execution and installer upgrade behavior still require successful platform verification.
 
 ## Studio API foundation
 
@@ -74,7 +74,7 @@ The run console includes bounded CPU, memory, workspace-I/O, filesystem-boundary
 
 ## Releases
 
-Tag a version as `vX.Y.Z` to build a Linux `.deb`, Windows `.msi`, and macOS `.dmg`. These are unsigned CI artifacts; Windows/macOS users may see operating-system security warnings. Signing and notarization are not configured. The release workflow builds platform packages but does not replace manual install/upgrade testing.
+Tag a version as `vX.Y.Z` to build a Linux `.deb`, Windows `.msi`, and macOS `.dmg`. These are unsigned CI artifacts; Windows/macOS users may see operating-system security warnings. Signing and notarization are not configured. The release workflow builds platform packages and runs install/removal smoke checks; it does not yet validate in-place upgrades or replace clean-machine manual testing.
 
 ## Remaining Phase 4 work
 
