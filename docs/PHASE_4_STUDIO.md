@@ -36,16 +36,13 @@ API version 1 routes:
 | GET | `/api/v1/experiments/{name}/snapshots/compare?a={id}&b={id}` | Compare two snapshots |
 | GET | `/api/v1/experiments/{name}/files?path={relative}` | List a workspace directory |
 | GET | `/api/v1/experiments/{name}/files/content?path={relative}` | Preview a UTF-8 text file, up to 256 KiB |
-| GET | `/api/v1/experiments/{name}/snapshots/{id}/verify` | Verify snapshot integrity |
-| GET | `/api/v1/experiments/{name}/snapshots/compare?a={id}&b={id}` | Compare two snapshots |
-| GET | `/api/v1/experiments/{name}/files?path={relative}` | List workspace directory |
-| GET | `/api/v1/experiments/{name}/files/content?path={relative}` | Preview a text file (256 KiB maximum) |
 | POST | `/api/v1/experiments/{name}/snapshots` | Create a snapshot |
 | POST | `/api/v1/experiments/{name}/snapshots/{id}/restore` | Restore a snapshot |
 | GET | `/api/v1/experiments/{name}/runs` | List runs and latest metrics |
 | GET | `/api/v1/experiments/{name}/events` | Authenticated server-sent run and telemetry updates |
 | POST | `/api/v1/experiments/{name}/runs` | Start an isolated run |
 | GET | `/api/v1/experiments/{name}/runs/{id}/logs` | Read the latest 1 MiB of captured logs |
+| POST | `/api/v1/experiments/{name}/runs/{id}/input` | Send up to 4 KiB to a running process stdin pipe |
 | POST | `/api/v1/experiments/{name}/runs/{id}/stop` | Stop a run |
 
 Run creation passes an argument vector to the existing runtime. It does not invoke a shell. On non-Linux hosts, the API reports the same unsupported-runtime error as the CLI rather than falling back to host execution.
