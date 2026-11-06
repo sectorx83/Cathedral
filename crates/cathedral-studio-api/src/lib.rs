@@ -4,13 +4,15 @@
 //! and exposes the same experiment registry, runtime, and snapshot engine as the CLI.
 
 use std::{
+    convert::Infallible,
     fs,
     path::{Component, Path, PathBuf},
-    time::UNIX_EPOCH,
+    time::{Duration, UNIX_EPOCH},
 };
 
 use axum::{
     body::Body,
+    response::sse::{Event, KeepAlive, Sse},
     extract::{Path as AxumPath, Query, State},
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE},
@@ -370,6 +372,7 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
             "/api/v1/experiments/:name/runs",
             get(list_runs).post(start_run),
         )
+        .route("/api/v1/experiments/:name/events", get(stream_events))
         .route("/api/v1/experiments/:name/runs/:run_id/logs", get(get_logs))
         .route(
             "/api/v1/experiments/:name/runs/:run_id/input",
@@ -826,6 +829,34 @@ async fn restore_snapshot(
 ) -> Result<StatusCode, ApiError> {
     snapshot::restore(&state.data_dir, &name, &snapshot_id)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn stream_events(
+    State(state): State<ApiState>,
+    AxumPath(name): AxumPath<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let (experiment, _) = experiment_workspace(&state.data_dir, &name)?;
+    let data_dir = state.data_dir;
+    let run_directory = run_root(&data_dir, &experiment);
+    let stream = async_stream::stream! {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        loop {
+            interval.tick().await;
+            let result = runner::list_runs(&run_directory)
+                .map_err(ApiError::from)
+                .and_then(|records| records.into_iter().map(run_view).collect::<Result<Vec<_>, _>>());
+            match result {
+                Ok(views) => match serde_json::to_string(&views) {
+                    Ok(data) => yield Ok::<Event, Infallible>(Event::default().event("runs").data(data)),
+                    Err(_) => yield Ok::<Event, Infallible>(Event::default().event("error").data("Could not encode run updates")),
+                },
+                Err(error) => yield Ok::<Event, Infallible>(Event::default().event("error").data(error.message)),
+            }
+        }
+    };
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new().interval(Duration::from_secs(15)).text("keep-alive"),
+    ))
 }
 
 async fn list_runs(
