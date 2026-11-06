@@ -18,7 +18,7 @@ use axum::{
     Json, Router,
 };
 use cathedral_core::{
-    create_experiment, delete_experiment, initialize, inspect_experiment, list_experiments,
+    create_experiment, delete_experiment, inspect_experiment, list_experiments,
     manifest::Manifest, platform::PlatformInfo, registry::Experiment, runner, snapshot,
     workspace::Workspace, CathedralError,
 };
@@ -398,6 +398,7 @@ async fn stop_run(
 mod tests {
     use super::*;
     use axum::{body::Body, http::Request};
+    use cathedral_core::initialize;
     use tempfile::tempdir;
     use tower::ServiceExt;
 
