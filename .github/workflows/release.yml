@@ -43,6 +43,48 @@ jobs:
       - name: Build platform installer
         working-directory: studio
         run: npm run tauri:build -- --bundles ${{ matrix.bundles }}
+      - name: Install and remove Linux package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_file=$(find src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)
+          test -n "$package_file"
+          package_name=$(dpkg-deb --field "$package_file" Package)
+          sudo apt-get install -y "$package_file"
+          dpkg-query -W -f='${Status}' "$package_name" | grep -q 'install ok installed'
+          sudo apt-get remove -y "$package_name"
+          if dpkg-query -W "$package_name" >/dev/null 2>&1; then
+            echo "Package remained installed after removal: $package_name" >&2
+            exit 1
+          fi
+      - name: Install and remove Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem src-tauri/target/release/bundle/msi -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw 'No MSI installer was produced.' }
+          $install = Start-Process msiexec.exe -ArgumentList @('/i', $msi.FullName, '/qn', '/norestart') -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "MSI install failed: $($install.ExitCode)" }
+          $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $msi.FullName, '/qn', '/norestart') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
+      - name: Install and remove macOS application
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg=$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)
+          test -n "$dmg"
+          mount="$RUNNER_TEMP/cathedral-dmg"
+          mkdir -p "$mount"
+          hdiutil attach "$dmg" -nobrowse -mountpoint "$mount"
+          app=$(find "$mount" -maxdepth 2 -name '*.app' -print -quit)
+          test -n "$app"
+          target="/Applications/$(basename "$app")"
+          ditto "$app" "$target"
+          test -d "$target/Contents"
+          rm -rf "$target"
+          hdiutil detach "$mount"
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
