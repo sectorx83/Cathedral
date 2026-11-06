@@ -4,7 +4,7 @@
 
 ## Studio API foundation
 
-The workspace includes the `cathedral-studio-api` binary and library.
+The workspace includes the `cathedral-studio-api` binary and library. The Tauri v2 desktop shell lives in `studio/src-tauri` and starts the API in-process on an ephemeral IPv4 loopback port. The shell obtains the one-process bearer token through a Tauri command; the React client auto-connects without persisting that token. In a browser, the same client can still connect manually to a separately launched local API.
 
 Start the API:
 
@@ -55,9 +55,13 @@ Run creation passes an argument vector to the existing runtime. It does not invo
 - Linux execution retains the documented Bubblewrap/cgroup limitations. Windows and macOS execution remains unsupported.
 - Do not expose this service through a reverse proxy or bind it to a public interface.
 
+## Desktop development
+
+From the `studio` directory, install Node dependencies and run `npm run tauri:dev` to launch the desktop application. Use `npm run tauri:build` to create platform-native bundles. CI compiles the Tauri application on Linux, Windows, and macOS; this compile check is not a substitute for installing and manually exercising each packaged release.
+
 ## Next Phase 4 work
 
-1. Wrap the existing React/TypeScript Studio UI in a Tauri desktop shell.
+1. Finish desktop interaction polish and validate packaged Tauri installers on each target operating system.
 2. Extend the Studio dashboard with a read-only, path-confined filesystem browser, snapshot integrity verification/comparison, and log viewer. The native desktop shell and integrated terminal remain outstanding.
 3. Add streaming observability and graph history.
 4. Add permission-scoped extension interfaces and SDK.

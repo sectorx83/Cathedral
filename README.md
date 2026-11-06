@@ -170,7 +170,7 @@ cathedral reproduce experiment.cath
 
 ## Technology direction
 
-The core, CLI, and first Studio API increment use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. The new `cathedral-studio-api` service uses Axum, binds to loopback only, and requires a fresh per-process bearer token. A Tauri + React + TypeScript desktop application, live streaming, and extension SDK are still planned work. The current API is request/response based and does not yet provide WebSocket streaming.
+The core, CLI, and first Studio API increment use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. The new `cathedral-studio-api` service uses Axum, binds to loopback only, and requires a fresh per-process bearer token. A Tauri v2 + React + TypeScript desktop shell is now present under `studio/src-tauri`; it starts the authenticated local API in-process and auto-connects the UI. Live streaming, the extension SDK, and verified installer releases are still planned work. The current API is request/response based and does not yet provide WebSocket streaming.
 
 The Linux runtime currently uses Bubblewrap namespaces and a restricted mount view, with optional cgroup v2 resource controls. Windows and macOS native isolation backends remain future work.
 
