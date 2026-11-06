@@ -433,7 +433,6 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
                 "-c",
                 "if [ -n \"$CATHEDRAL_TIMEOUT_SECONDS\" ]; then timeout --signal=TERM --kill-after=5s \"$CATHEDRAL_TIMEOUT_SECONDS\" bwrap \"$@\"; else bwrap \"$@\"; fi; status=$?; printf '%s\\n' \"$status\" > \"$CATHEDRAL_RUN_STATUS_FILE\"; exit \"$status\"",
                 "cathedral-supervisor",
-                "bwrap",
             ])
             .args(bwrap_args)
             .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
