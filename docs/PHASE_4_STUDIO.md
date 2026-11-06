@@ -42,7 +42,8 @@ API version 1 routes:
 | GET | `/api/v1/experiments/{name}/events` | Authenticated server-sent run and telemetry updates |
 | POST | `/api/v1/experiments/{name}/runs` | Start an isolated run |
 | GET | `/api/v1/experiments/{name}/runs/{id}/logs` | Read the latest 1 MiB of captured logs |
-| POST | `/api/v1/experiments/{name}/runs/{id}/input` | Send up to 4 KiB to a running process stdin pipe |
+| POST | `/api/v1/experiments/{name}/runs/{id}/input` | Send up to 4 KiB to a running PTY master |
+| POST | `/api/v1/experiments/{name}/runs/{id}/terminal/resize` | Set terminal rows and columns (2–200 rows, 2–500 columns) |
 | POST | `/api/v1/experiments/{name}/runs/{id}/stop` | Stop a run |
 
 Run creation passes an argument vector to the existing runtime. It does not invoke a shell. On non-Linux hosts, the API reports the same unsupported-runtime error as the CLI rather than falling back to host execution.
@@ -69,7 +70,7 @@ The registry API is `GET/POST /api/v1/plugins`, `PUT /api/v1/plugins/{id}/grants
 
 ## Safe starter experiments
 
-The run console includes bounded CPU, memory, and workspace-I/O starter commands, plus a 4 KiB-at-a-time stdin channel for running workloads. These are ordinary argv-based workload examples, not host-wide pressure tools. They still depend on the configured runtime and its actual isolation limits.
+The run console includes bounded CPU, memory, workspace-I/O, filesystem-boundary, network-namespace, and child-process probes. Workload stdin/stdout/stderr are attached to a Linux pseudo-terminal; the API retains a PTY master for bounded input and window-size changes while a reader captures output into the run log. These are ordinary argv-based workload examples, not host-wide pressure or network impairment tools. They still depend on the configured runtime and its actual isolation limits.
 
 ## Releases
 
@@ -77,8 +78,8 @@ Tag a version as `vX.Y.Z` to build a Linux `.deb`, Windows `.msi`, and macOS `.d
 
 ## Remaining Phase 4 work
 
-1. Add a true interactive PTY terminal with explicit input/output handling, resize support, and cancellation. The current bounded stdin channel is a pipe, not a TTY.
-2. Expand capability-gated lab experiments. Resource-pressure starter workloads are bounded and available; network fault injection remains deferred until it can be confined to a dedicated experiment network namespace.
-3. Build and manually validate installers, upgrade behavior, and removal on Linux, Windows, and macOS. Current CI compile checks and unsigned release bundles do not prove that each installer works on a clean machine.
+1. Finish terminal behavior validation, including resize and interactive workloads, on a Linux host where Bubblewrap user/PID/network namespaces are available. The GitHub-hosted Linux runner currently reports that its Bubblewrap smoke command cannot execute the expected `/usr/bin/true` test command, so tests that require the sandbox return early there; a green Rust test job alone does not prove the real sandbox/PTY path ran.
+2. Expand capability-gated lab experiments beyond the bounded CPU, memory, disk, filesystem, network-isolation, and child-process probes. Network fault injection remains disabled until it can be confined to a dedicated experiment network namespace with explicit opt-in and cleanup.
+3. Exercise installer upgrade behavior and clean-machine installation/removal on Linux, Windows, and macOS. The release workflow now builds each installer and runs platform-specific install/removal smoke checks, but those jobs have not yet been executed successfully and do not yet test an in-place upgrade.
 
-The authenticated API, live event stream, declarative extension SDK/registry, desktop client, and bounded starter workloads are implemented. Phase 4 remains in progress until the PTY, advanced lab, and installer validation criteria are met.
+The authenticated API, live event stream, PTY-backed run I/O, terminal resizing endpoint, declarative extension SDK/registry, desktop client, and bounded starter probes are implemented. Phase 4 remains in progress until the platform installer workflow and real Linux sandbox/PTY validation pass, and the remaining advanced lab scope is completed.
