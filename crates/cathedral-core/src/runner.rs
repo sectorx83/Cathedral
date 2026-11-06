@@ -1740,7 +1740,7 @@ mod tests {
         }
         assert!(output.contains("PTY_READY"), "workload stdin was not attached to a TTY: {output}");
         resize_terminal(&run_root, &record.id, 40, 120).unwrap();
-        assert_eq!(write_stdin(&run_root, &record.id, b"cathedral-input\\n").unwrap(), 16);
+        assert_eq!(write_stdin(&run_root, &record.id, b"cathedral-input\n").unwrap(), 16);
         for _ in 0..200 {
             output = logs(&run_root, &record.id).unwrap();
             if output.contains("PTY_INPUT:cathedral-input") {
