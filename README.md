@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed CI run [#226](https://github.com/sectorx83/Cathedral-/actions/runs/42218136492) on Linux, Windows, and macOS. Phase 4 now includes a Tauri v2 desktop shell, authenticated local API, experiment controls, resource telemetry, logs, a path-confined read-only filesystem browser, and snapshot verification/comparison. Phase 4 remains in progress: full PTY support, event streaming, executable extension loading, advanced fault injection, and manually validated installer releases are outstanding. The run console supports bounded stdin delivery to running Linux processes, but not TTY-dependent applications. The declarative plugin SDK/registry and bounded starter workload templates are implemented. Windows and macOS workload isolation remain unsupported.
+> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed cross-platform CI. Phase 4 includes a Tauri v2 desktop shell, authenticated local API, experiment controls, live server-sent run telemetry, captured logs, a path-confined read-only filesystem browser, snapshot verification/comparison, a declarative permission-scoped extension registry, and bounded starter workloads. Phase 4 remains in progress: interactive PTY support, broader advanced lab experiments, and manually validated installer releases are outstanding. The run console supports bounded stdin delivery to running Linux processes, but not TTY-dependent applications. Windows and macOS workload isolation remain unsupported.
 
 ## What Cathedral is
 
@@ -172,7 +172,7 @@ cathedral reproduce experiment.cath
 
 ## Technology direction
 
-The core, CLI, and first Studio API increment use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. The new `cathedral-studio-api` service uses Axum, binds to loopback only, and requires a fresh per-process bearer token. A Tauri v2 + React + TypeScript desktop shell is present under `studio/src-tauri`; it starts the authenticated local API in-process and auto-connects the UI. Resource charts currently use 2.5-second polling. Server-sent events/WebSocket streaming, the extension SDK, advanced lab tools, and verified installer releases are still planned work. The API is request/response based and does not yet provide event streaming.
+The core, CLI, and Studio API use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. The `cathedral-studio-api` service uses Axum, binds to loopback only, and requires a fresh per-process bearer token. A Tauri v2 + React + TypeScript desktop shell is present under `studio/src-tauri`; it starts the authenticated local API in-process and auto-connects the UI. The Studio receives run updates through an authenticated server-sent events stream and retains bounded metric history. The declarative extension SDK validates manifests and permission grants but does not execute third-party code. PTY support, broader advanced lab tools, and manually validated installer releases remain outstanding.
 
 The Linux runtime currently uses Bubblewrap namespaces and a restricted mount view, with optional cgroup v2 resource controls. Windows and macOS native isolation backends remain future work.
 
