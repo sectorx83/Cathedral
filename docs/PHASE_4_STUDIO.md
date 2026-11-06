@@ -1,6 +1,6 @@
 # Phase 4: Cathedral Studio & Ecosystem
 
-**Status: In progress.** The first Phase 4 increment establishes a local authenticated API so a desktop client can use the same experiment registry, runtime, and snapshot engine as the CLI. The desktop shell and interactive UI are not yet implemented.
+**Status: In progress.** The current Phase 4 implementation includes the authenticated local API, a Tauri v2 desktop shell, and a React/TypeScript Studio client. The UI supports experiment management, isolated run controls, process telemetry, logs, read-only workspace browsing, and snapshot create/verify/compare/restore. The desktop shell is compile-checked on Linux, Windows, and macOS in CI; installers have not yet been packaged and manually validated.
 
 ## Studio API foundation
 
@@ -34,6 +34,10 @@ API version 1 routes:
 | GET | `/api/v1/experiments/{name}/snapshots` | List snapshots |
 | GET | `/api/v1/experiments/{name}/snapshots/{id}/verify` | Verify snapshot integrity |
 | GET | `/api/v1/experiments/{name}/snapshots/compare?a={id}&b={id}` | Compare two snapshots |
+| GET | `/api/v1/experiments/{name}/files?path={relative}` | List a workspace directory |
+| GET | `/api/v1/experiments/{name}/files/content?path={relative}` | Preview a UTF-8 text file, up to 256 KiB |
+| GET | `/api/v1/experiments/{name}/snapshots/{id}/verify` | Verify snapshot integrity |
+| GET | `/api/v1/experiments/{name}/snapshots/compare?a={id}&b={id}` | Compare two snapshots |
 | GET | `/api/v1/experiments/{name}/files?path={relative}` | List workspace directory |
 | GET | `/api/v1/experiments/{name}/files/content?path={relative}` | Preview a text file (256 KiB maximum) |
 | POST | `/api/v1/experiments/{name}/snapshots` | Create a snapshot |
@@ -51,7 +55,7 @@ Run creation passes an argument vector to the existing runtime. It does not invo
 - All routes require a random bearer token generated for that process.
 - The token is emitted only in the startup-ready line and is not saved in the registry or workspace.
 - CORS is limited to Tauri origins and the standard Vite development origin. CORS is not authentication; the bearer token remains mandatory.
-- The API does not provide arbitrary filesystem paths, shell evaluation, or unrestricted host execution. The read-only file browser accepts only workspace-relative paths, rejects symlink traversal, limits text previews to 256 KiB, and does not preview binary files.
+- The API does not provide arbitrary filesystem paths, shell evaluation, or unrestricted host execution. The file browser accepts workspace-relative paths only, rejects symlink traversal, and caps UTF-8 text previews at 256 KiB. Binary and oversized files are not previewed. The read-only file browser accepts only workspace-relative paths, rejects symlink traversal, limits text previews to 256 KiB, and does not preview binary files.
 - Linux execution retains the documented Bubblewrap/cgroup limitations. Windows and macOS execution remains unsupported.
 - Do not expose this service through a reverse proxy or bind it to a public interface.
 
@@ -61,10 +65,10 @@ From the `studio` directory, install Node dependencies and run `npm run tauri:de
 
 ## Next Phase 4 work
 
-1. Finish desktop interaction polish and validate packaged Tauri installers on each target operating system.
-2. Extend the Studio dashboard with a read-only, path-confined filesystem browser, snapshot integrity verification/comparison, and log viewer. The native desktop shell and integrated terminal remain outstanding.
-3. Add streaming observability and graph history.
-4. Add permission-scoped extension interfaces and SDK.
-5. Package and verify platform-specific releases.
+1. Add an interactive PTY terminal with explicit input/output handling and cancellation.
+2. Replace the current 2.5-second telemetry polling with SSE or WebSocket streaming and bounded history.
+3. Implement a permission-scoped extension SDK and lifecycle without executing untrusted native code in-process.
+4. Add safe, capability-gated advanced lab tools, including resource-pressure experiments; network fault injection must remain confined to an experiment namespace.
+5. Build and manually validate signed/unsigned platform installers, upgrade behavior, and removal on Linux, Windows, and macOS.
 
-The API foundation is not the desktop application and does not complete Phase 4.
+The API and desktop shell are now present, but Phase 4 is not complete until the remaining terminal, streaming, extension, advanced-tool, and release acceptance criteria are met.

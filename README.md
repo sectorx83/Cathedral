@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed CI run [#226](https://github.com/sectorx83/Cathedral-/actions/runs/42218136492) on Linux, Windows, and macOS. Declared dependencies are recorded but not automatically resolved or installed. Phase 4 has started with a local authenticated Studio API and a React/TypeScript development preview; the native Tauri desktop application is not implemented yet. Windows and macOS workload isolation remain unsupported.
+> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed CI run [#226](https://github.com/sectorx83/Cathedral-/actions/runs/42218136492) on Linux, Windows, and macOS. Phase 4 now includes a Tauri v2 desktop shell, authenticated local API, experiment controls, resource telemetry, logs, a path-confined read-only filesystem browser, and snapshot verification/comparison. Phase 4 remains in progress: interactive terminal support, event streaming, plugin SDK, advanced lab tools, and tested installer releases are outstanding. Windows and macOS workload isolation remain unsupported.
 
 ## What Cathedral is
 
@@ -170,7 +170,7 @@ cathedral reproduce experiment.cath
 
 ## Technology direction
 
-The core, CLI, and first Studio API increment use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. The new `cathedral-studio-api` service uses Axum, binds to loopback only, and requires a fresh per-process bearer token. A Tauri v2 + React + TypeScript desktop shell is now present under `studio/src-tauri`; it starts the authenticated local API in-process and auto-connects the UI. Live streaming, the extension SDK, and verified installer releases are still planned work. The current API is request/response based and does not yet provide WebSocket streaming.
+The core, CLI, and first Studio API increment use Rust. SQLite stores local metadata; SHA-256 protects snapshot and package file integrity. The new `cathedral-studio-api` service uses Axum, binds to loopback only, and requires a fresh per-process bearer token. A Tauri v2 + React + TypeScript desktop shell is present under `studio/src-tauri`; it starts the authenticated local API in-process and auto-connects the UI. Resource charts currently use 2.5-second polling. Server-sent events/WebSocket streaming, the extension SDK, advanced lab tools, and verified installer releases are still planned work. The API is request/response based and does not yet provide event streaming.
 
 The Linux runtime currently uses Bubblewrap namespaces and a restricted mount view, with optional cgroup v2 resource controls. Windows and macOS native isolation backends remain future work.
 
