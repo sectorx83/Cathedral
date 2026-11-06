@@ -290,7 +290,7 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
             "http://localhost:5173".parse().expect("static origin"),
             "http://127.0.0.1:5173".parse().expect("static origin"),
         ]))
-        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers([AUTHORIZATION, CONTENT_TYPE]);
 
     Router::new()

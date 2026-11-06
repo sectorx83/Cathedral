@@ -164,6 +164,8 @@ cathedral reproduce experiment.cath
 - [Experiment manifest](docs/EXPERIMENT_MANIFEST.md): version-1 `cathedral.toml` format.
 - [Snapshot and reproduction](docs/PHASE_3_SNAPSHOT.md): checkpoint format, integrity guarantees, package workflow, and limitations.
 - [Development setup](docs/DEVELOPMENT.md): development workflow and quality gates.
+- [Cathedral Studio](docs/PHASE_4_STUDIO.md): desktop setup, local API, and current Phase 4 capabilities.
+- [Extension development](docs/EXTENSIONS.md): plugin manifest format, permission vocabulary, and security limits.
 - [CI verification record](docs/CI_STATUS.md): latest source revision verified across Linux, Windows, and macOS.
 - [Security model](SECURITY.md): threat model, isolation boundaries, and security commitments.
 - [Contributing](CONTRIBUTING.md): contribution workflow and engineering standards.

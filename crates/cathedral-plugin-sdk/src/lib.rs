@@ -64,10 +64,13 @@ impl PluginManifest {
             return Err(PluginManifestError::UnsupportedSchema(self.schema_version));
         }
         let id = self.id.as_bytes();
+        let first_is_valid = id.first().is_some_and(u8::is_ascii_lowercase);
+        let last_is_valid = id.last().is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit());
+        let characters_are_valid = id.iter().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-');
         if !(2..=64).contains(&id.len())
-            || !id[0].is_ascii_lowercase()
-            || !id[id.len() - 1].is_ascii_lowercase() && !id[id.len() - 1].is_ascii_digit()
-            || !id.iter().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+            || !first_is_valid
+            || !last_is_valid
+            || !characters_are_valid
             || self.id.contains("--")
         {
             return Err(PluginManifestError::InvalidId);
