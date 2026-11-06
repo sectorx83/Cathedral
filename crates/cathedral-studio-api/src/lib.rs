@@ -1210,6 +1210,32 @@ mod tests {
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
     #[tokio::test]
+    async fn live_run_events_are_authenticated_server_sent_events() {
+        let temp = tempdir().unwrap();
+        cathedral_core::create_experiment(
+            temp.path(),
+            "stream-lab",
+            Manifest::minimal("stream-lab"),
+        )
+        .unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/experiments/stream-lab/events")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers()[CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("text/event-stream"));
+    }
+
+    #[tokio::test]
     async fn api_creates_an_experiment() {
         let temp = tempdir().unwrap();
         let response = test_router(temp.path())
