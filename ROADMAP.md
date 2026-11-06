@@ -119,10 +119,13 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 4: Cathedral Studio & Ecosystem
 
+**Status: In progress.** The first increment adds a loopback-only, bearer-token-authenticated Axum API over the existing experiment core, runtime, and snapshot engine. The Tauri desktop shell, React/TypeScript UI, streaming dashboard, extension system, and release packaging are not implemented yet. See [Phase 4 Studio](docs/PHASE_4_STUDIO.md).
+
 **Objective:** Deliver a polished desktop experience and a safe extension model.
 
 ### Scope
 
+- Establish a local authenticated API shared by the desktop client and CLI.
 - Build a Tauri desktop application with React and TypeScript.
 - Provide an experiment dashboard and lifecycle controls.
 - Add an integrated terminal, live resource graphs, filesystem browser, logs, and snapshot timeline.
