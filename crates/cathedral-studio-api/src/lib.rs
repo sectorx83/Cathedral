@@ -1224,6 +1224,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn terminal_resize_rejects_unsafe_dimensions_before_run_lookup() {
+        let temp = tempdir().unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/experiments/no-such-experiment/runs/no-run/terminal/resize")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"rows":1,"cols":80}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn stdin_endpoint_rejects_oversized_input_before_run_lookup() {
         let temp = tempdir().unwrap();
         let response = test_router(temp.path())
