@@ -71,7 +71,7 @@ The registry API is `GET/POST /api/v1/plugins`, `PUT /api/v1/plugins/{id}/grants
 
 ## Safe starter experiments
 
-The run console includes bounded CPU, memory, and workspace-I/O starter commands. These are ordinary argv-based workload examples, not host-wide pressure tools. They still depend on the configured runtime and its actual isolation limits.
+The run console includes bounded CPU, memory, and workspace-I/O starter commands, plus a 4 KiB-at-a-time stdin channel for running workloads. These are ordinary argv-based workload examples, not host-wide pressure tools. They still depend on the configured runtime and its actual isolation limits.
 
 ## Releases
 

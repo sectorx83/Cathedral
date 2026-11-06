@@ -38,6 +38,8 @@ pub struct RunRecord {
     pub exit_status_file: String,
     #[serde(default)]
     pub cgroup_path: Option<String>,
+    #[serde(default)]
+    pub stdin_file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +298,20 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let log_path = directory.join("combined.log");
         let log = File::create(&log_path)?;
         let stderr = log.try_clone()?;
+        use std::os::unix::{ffi::OsStrExt, io::FromRawFd};
+        let stdin_path = directory.join("stdin.pipe");
+        let stdin_c_path = std::ffi::CString::new(stdin_path.as_os_str().as_bytes())
+            .map_err(|_| CathedralError::Manifest("stdin pipe path contains a null byte".to_owned()))?;
+        if unsafe { libc::mkfifo(stdin_c_path.as_ptr(), 0o600) } != 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        let stdin_fd = unsafe { libc::open(stdin_c_path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
+        if stdin_fd < 0 {
+            let error = std::io::Error::last_os_error();
+            let _ = fs::remove_file(&stdin_path);
+            return Err(error.into());
+        }
+        let stdin_pipe = unsafe { File::from_raw_fd(stdin_fd) };
 
         if manifest.resources.timeout_seconds.is_some() {
             let supported = Command::new("timeout")
@@ -408,7 +424,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             .args(bwrap_args)
             .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
             .env("CATHEDRAL_TIMEOUT_SECONDS", manifest.resources.timeout_seconds.map(|value| value.to_string()).unwrap_or_default())
-            .stdin(Stdio::null())
+            .stdin(Stdio::from(stdin_pipe))
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));
         #[cfg(unix)]
@@ -488,6 +504,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             log_file: log_path.to_string_lossy().into_owned(),
             exit_status_file: status_path.to_string_lossy().into_owned(),
             cgroup_path: cgroup_path.map(|path| path.to_string_lossy().into_owned()),
+            stdin_file: Some(stdin_path.to_string_lossy().into_owned()),
         };
         let encoded = serde_json::to_vec_pretty(&record)
             .map_err(|error| CathedralError::Manifest(error.to_string()))?;
@@ -846,6 +863,36 @@ pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     Ok(fs::read_to_string(log_path)?)
 }
 
+/// Write a bounded chunk to a running isolated workload's standard input.
+/// This is a pipe-backed channel, not a pseudo-terminal.
+pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize> {
+    if input.is_empty() { return Ok(0); }
+    if input.len() > 4096 { return Err(CathedralError::Manifest("stdin chunks are limited to 4096 bytes".to_owned())); }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (run_root, run_id, input);
+        Err(CathedralError::Manifest("interactive workload input is currently supported on Linux only".to_owned()))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::FileTypeExt;
+        let directory = run_directory(run_root, run_id)?;
+        let record = read_record(&directory.join("run.json"))?;
+        if process_state(&record) != ProcessState::Running {
+            return Err(CathedralError::Manifest("workload is not running".to_owned()));
+        }
+        let stored = record.stdin_file.ok_or_else(|| CathedralError::Manifest("this run does not expose an input channel".to_owned()))?;
+        let path = PathBuf::from(stored);
+        if path.parent() != Some(directory.as_path()) { return Err(CathedralError::UnsafePath(path)); }
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() || !metadata.file_type().is_fifo() {
+            return Err(CathedralError::UnsafePath(path));
+        }
+        let mut pipe = OpenOptions::new().write(true).open(path)?;
+        pipe.write_all(input)?;
+        Ok(input.len())
+    }
+}
 pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -1504,6 +1551,7 @@ mod tests {
             log_file: String::new(),
             exit_status_file: String::new(),
             cgroup_path: None,
+            stdin_file: None,
         };
         assert_eq!(process_state(&record), ProcessState::ProcessIdentityChanged);
     }
@@ -1528,6 +1576,7 @@ mod tests {
             log_file: String::new(),
             exit_status_file: String::new(),
             cgroup_path: None,
+            stdin_file: None,
         })
         .is_err());
     }

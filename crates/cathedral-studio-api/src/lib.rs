@@ -128,6 +128,11 @@ struct CreateExperimentRequest {
 struct RunRequest {
     command: Vec<String>,
 }
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StdinRequest { data: String }
+#[derive(Debug, Serialize)]
+struct StdinView { bytes_written: usize }
 
 #[derive(Debug, Serialize)]
 struct SnapshotView {
@@ -317,6 +322,7 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
             get(list_runs).post(start_run),
         )
         .route("/api/v1/experiments/:name/runs/:run_id/logs", get(get_logs))
+        .route("/api/v1/experiments/:name/runs/:run_id/input", axum::routing::post(send_stdin))
         .route(
             "/api/v1/experiments/:name/runs/:run_id/stop",
             axum::routing::post(stop_run),
@@ -643,6 +649,18 @@ async fn start_run(
     Ok((StatusCode::CREATED, Json(run_view(record)?)))
 }
 
+async fn send_stdin(
+    State(state): State<ApiState>,
+    AxumPath((name, run_id)): AxumPath<(String, String)>,
+    Json(request): Json<StdinRequest>,
+) -> Result<Json<StdinView>, ApiError> {
+    let bytes = request.data.as_bytes();
+    if bytes.len() > 4096 { return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "stdin chunks are limited to 4096 bytes")); }
+    if bytes.contains(&0) { return Err(ApiError::new(StatusCode::BAD_REQUEST, "stdin data cannot contain NUL bytes")); }
+    let (experiment, _) = experiment_workspace(&state.data_dir, &name)?;
+    let bytes_written = runner::write_stdin(&run_root(&state.data_dir, &experiment), &run_id, bytes)?;
+    Ok(Json(StdinView { bytes_written }))
+}
 async fn get_logs(
     State(state): State<ApiState>,
     AxumPath((name, run_id)): AxumPath<(String, String)>,
@@ -852,6 +870,18 @@ mod tests {
         assert_eq!(removed.status(), StatusCode::NO_CONTENT);
     }
 
+    #[tokio::test]
+    async fn stdin_endpoint_rejects_oversized_input_before_run_lookup() {
+        let temp = tempdir().unwrap();
+        let response = test_router(temp.path()).oneshot(
+            Request::builder().method(Method::POST)
+                .uri("/api/v1/experiments/no-such-experiment/runs/no-run/input")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({"data": "x".repeat(4097)}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
     #[tokio::test]
     async fn api_creates_an_experiment() {
         let temp = tempdir().unwrap();
