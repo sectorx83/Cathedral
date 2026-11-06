@@ -1684,6 +1684,52 @@ mod tests {
     }
     #[cfg(target_os = "linux")]
     #[test]
+    fn isolated_workload_uses_a_real_pty_for_input_output_and_resize() {
+        if !bubblewrap_works() {
+            return;
+        }
+        let temporary = tempfile::tempdir().unwrap();
+        let workspace = temporary.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        Manifest::minimal("pty-test")
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
+        let run_root = temporary.path().join("data").join("runs").join("pty-test");
+        fs::create_dir_all(run_root.parent().unwrap()).unwrap();
+        let record = launch(
+            &workspace,
+            &run_root,
+            &[
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "if [ -t 0 ]; then printf 'PTY_READY\\n'; else printf 'NOT_A_TTY\\n'; fi; IFS= read -r value; printf 'PTY_INPUT:%s\\n' \"$value\"".to_owned(),
+            ],
+        )
+        .unwrap();
+        assert!(record.stdin_file.is_none(), "new runs must not use the legacy FIFO input channel");
+        let mut output = String::new();
+        for _ in 0..200 {
+            output = logs(&run_root, &record.id).unwrap();
+            if output.contains("PTY_READY") || output.contains("NOT_A_TTY") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(output.contains("PTY_READY"), "workload stdin was not attached to a TTY: {output}");
+        resize_terminal(&run_root, &record.id, 40, 120).unwrap();
+        assert_eq!(write_stdin(&run_root, &record.id, b"cathedral-input\\n").unwrap(), 16);
+        for _ in 0..200 {
+            output = logs(&run_root, &record.id).unwrap();
+            if output.contains("PTY_INPUT:cathedral-input") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(output.contains("PTY_INPUT:cathedral-input"), "PTY input was not delivered: {output}");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn refuses_to_stop_a_reused_process_identifier() {
         let record = RunRecord {
             id: "test-run".to_owned(),
