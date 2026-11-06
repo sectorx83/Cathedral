@@ -54,7 +54,8 @@ jobs:
           sudo apt-get install -y "$package_file"
           dpkg-query -W -f='${Status}' "$package_name" | grep -q 'install ok installed'
           sudo apt-get remove -y "$package_name"
-          if dpkg-query -W "$package_name" >/dev/null 2>&1; then
+          package_status=$(dpkg-query -W -f='${db:Status-Status}' "$package_name" 2>/dev/null || true)
+          if [ "$package_status" = "installed" ]; then
             echo "Package remained installed after removal: $package_name" >&2
             exit 1
           fi
