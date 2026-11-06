@@ -43,6 +43,7 @@ API version 1 routes:
 | POST | `/api/v1/experiments/{name}/snapshots` | Create a snapshot |
 | POST | `/api/v1/experiments/{name}/snapshots/{id}/restore` | Restore a snapshot |
 | GET | `/api/v1/experiments/{name}/runs` | List runs and latest metrics |
+| GET | `/api/v1/experiments/{name}/events` | Authenticated server-sent run and telemetry updates |
 | POST | `/api/v1/experiments/{name}/runs` | Start an isolated run |
 | GET | `/api/v1/experiments/{name}/runs/{id}/logs` | Read the latest 1 MiB of captured logs |
 | POST | `/api/v1/experiments/{name}/runs/{id}/stop` | Stop a run |
@@ -77,12 +78,10 @@ The run console includes bounded CPU, memory, and workspace-I/O starter commands
 
 Tag a version as `vX.Y.Z` to build a Linux `.deb`, Windows `.msi`, and macOS `.dmg`. These are unsigned CI artifacts; Windows/macOS users may see operating-system security warnings. Signing and notarization are not configured. The release workflow builds platform packages but does not replace manual install/upgrade testing.
 
-## Next Phase 4 work
+## Remaining Phase 4 work
 
-1. Add an interactive PTY terminal with explicit input/output handling and cancellation.
-2. Replace the current 2.5-second telemetry polling with SSE or WebSocket streaming and bounded history.
-3. Implement a permission-scoped extension SDK and lifecycle without executing untrusted native code in-process.
-4. Add safe, capability-gated advanced lab tools, including resource-pressure experiments; network fault injection must remain confined to an experiment namespace.
-5. Build and manually validate signed/unsigned platform installers, upgrade behavior, and removal on Linux, Windows, and macOS.
+1. Add a true interactive PTY terminal with explicit input/output handling, resize support, and cancellation. The current bounded stdin channel is a pipe, not a TTY.
+2. Expand capability-gated lab experiments. Resource-pressure starter workloads are bounded and available; network fault injection remains deferred until it can be confined to a dedicated experiment network namespace.
+3. Build and manually validate installers, upgrade behavior, and removal on Linux, Windows, and macOS. Current CI compile checks and unsigned release bundles do not prove that each installer works on a clean machine.
 
-The API and desktop shell are now present, but Phase 4 is not complete until the remaining terminal, streaming, extension, advanced-tool, and release acceptance criteria are met.
+The authenticated API, live event stream, declarative extension SDK/registry, desktop client, and bounded starter workloads are implemented. Phase 4 remains in progress until the PTY, advanced lab, and installer validation criteria are met.
