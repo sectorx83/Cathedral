@@ -14,11 +14,22 @@ use std::{
 };
 #[cfg(target_os = "linux")]
 use std::{
+    collections::HashMap,
     fs::{File, OpenOptions},
     io::{Read, Write},
+    os::fd::{AsRawFd, FromRawFd},
     process::{Command, Stdio},
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(target_os = "linux")]
+static PTY_MASTERS: OnceLock<Mutex<HashMap<String, File>>> = OnceLock::new();
+
+#[cfg(target_os = "linux")]
+fn pty_masters() -> &'static Mutex<HashMap<String, File>> {
+    PTY_MASTERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunRecord {
@@ -296,24 +307,25 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let directory = canonical_run_root.join(&id);
         fs::create_dir(&directory)?;
         let log_path = directory.join("combined.log");
-        let log = File::create(&log_path)?;
-        let stderr = log.try_clone()?;
-        use std::os::unix::{ffi::OsStrExt, io::FromRawFd};
-        let stdin_path = directory.join("stdin.pipe");
-        let stdin_c_path =
-            std::ffi::CString::new(stdin_path.as_os_str().as_bytes()).map_err(|_| {
-                CathedralError::Manifest("stdin pipe path contains a null byte".to_owned())
-            })?;
-        if unsafe { libc::mkfifo(stdin_c_path.as_ptr(), 0o600) } != 0 {
+        File::create(&log_path)?;
+        let mut master_fd = -1;
+        let mut slave_fd = -1;
+        let window = libc::winsize { ws_row: 24, ws_col: 80, ws_xpixel: 0, ws_ypixel: 0 };
+        if unsafe { libc::openpty(&mut master_fd, &mut slave_fd, std::ptr::null_mut(), std::ptr::null(), &window) } != 0 {
             return Err(std::io::Error::last_os_error().into());
         }
-        let stdin_fd = unsafe { libc::open(stdin_c_path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
-        if stdin_fd < 0 {
-            let error = std::io::Error::last_os_error();
-            let _ = fs::remove_file(&stdin_path);
-            return Err(error.into());
+        let master = unsafe { File::from_raw_fd(master_fd) };
+        let slave = unsafe { File::from_raw_fd(slave_fd) };
+        for fd in [master.as_raw_fd(), slave.as_raw_fd()] {
+            let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+            if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
         }
-        let stdin_pipe = unsafe { File::from_raw_fd(stdin_fd) };
+        let slave_stdin = slave.try_clone()?;
+        let slave_stdout = slave.try_clone()?;
+        let slave_stderr = slave.try_clone()?;
+        let master_reader = master.try_clone()?;
 
         if manifest.resources.timeout_seconds.is_some() {
             let supported = Command::new("timeout")
@@ -334,7 +346,6 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         child
             .args([
                 "--unshare-all",
-                "--new-session",
                 "--die-with-parent",
                 "--ro-bind",
                 "/usr",
@@ -426,13 +437,23 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             .args(bwrap_args)
             .env("CATHEDRAL_RUN_STATUS_FILE", &status_path)
             .env("CATHEDRAL_TIMEOUT_SECONDS", manifest.resources.timeout_seconds.map(|value| value.to_string()).unwrap_or_default())
-            .stdin(Stdio::from(stdin_pipe))
-            .stdout(Stdio::from(log))
-            .stderr(Stdio::from(stderr));
+            .stdin(Stdio::from(slave_stdin))
+            .stdout(Stdio::from(slave_stdout))
+            .stderr(Stdio::from(slave_stderr));
         #[cfg(unix)]
         {
             use std::os::unix::{ffi::OsStrExt, process::CommandExt};
-            supervisor.process_group(0);
+            unsafe {
+                supervisor.pre_exec(|| {
+                    if libc::setsid() < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as _, 0) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
             if let Some(path) = &cgroup_path {
                 let control_file =
                     std::ffi::CString::new(path.join("cgroup.procs").as_os_str().as_bytes())
@@ -481,6 +502,35 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             }
         };
         let supervisor_pid = process.id();
+        pty_masters()
+            .lock()
+            .map_err(|_| CathedralError::Manifest("PTY registry lock was poisoned".to_owned()))?
+            .insert(id.clone(), master);
+        let reader_log = log_path.clone();
+        let reader_id = id.clone();
+        if let Err(error) = std::thread::Builder::new().name(format!("cathedral-pty-{reader_id}")).spawn(move || {
+            let mut reader = master_reader;
+            let Ok(mut log) = OpenOptions::new().append(true).open(reader_log) else {
+                if let Ok(mut terminals) = pty_masters().lock() { terminals.remove(&reader_id); }
+                return;
+            };
+            let mut buffer = [0u8; 8192];
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(count) => if log.write_all(&buffer[..count]).is_err() { break; },
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
+                    Err(_) => break,
+                }
+            }
+            let _ = log.flush();
+            if let Ok(mut terminals) = pty_masters().lock() { terminals.remove(&reader_id); }
+        }) {
+            let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
+            if let Ok(mut terminals) = pty_masters().lock() { terminals.remove(&id); }
+            return Err(CathedralError::Manifest(format!("could not start PTY output reader: {error}")));
+        }
         let pid = wait_for_workload_pid(supervisor_pid).unwrap_or(supervisor_pid);
         let supervisor_start_ticks = proc_start_ticks(supervisor_pid).unwrap_or(0);
         if let Some(path) = &cgroup_path {
@@ -506,7 +556,7 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             log_file: log_path.to_string_lossy().into_owned(),
             exit_status_file: status_path.to_string_lossy().into_owned(),
             cgroup_path: cgroup_path.map(|path| path.to_string_lossy().into_owned()),
-            stdin_file: Some(stdin_path.to_string_lossy().into_owned()),
+            stdin_file: None,
         };
         let encoded = serde_json::to_vec_pretty(&record)
             .map_err(|error| CathedralError::Manifest(error.to_string()))?;
@@ -893,8 +943,16 @@ pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize>
                 "workload is not running".to_owned(),
             ));
         }
+        if let Some(master) = pty_masters()
+            .lock()
+            .map_err(|_| CathedralError::Manifest("PTY registry lock was poisoned".to_owned()))?
+            .get_mut(run_id)
+        {
+            master.write_all(input)?;
+            return Ok(input.len());
+        }
         let stored = record.stdin_file.ok_or_else(|| {
-            CathedralError::Manifest("this run does not expose an input channel".to_owned())
+            CathedralError::Manifest("this run has no active PTY input channel".to_owned())
         })?;
         let path = PathBuf::from(stored);
         if path.parent() != Some(directory.as_path()) {
@@ -912,6 +970,35 @@ pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize>
         Ok(input.len())
     }
 }
+
+pub fn resize_terminal(run_root: &Path, run_id: &str, rows: u16, cols: u16) -> Result<()> {
+    if !(2..=200).contains(&rows) || !(2..=500).contains(&cols) {
+        return Err(CathedralError::Manifest("terminal size must be between 2-200 rows and 2-500 columns".to_owned()));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (run_root, run_id, rows, cols);
+        Err(CathedralError::Manifest("PTY terminal control is currently supported on Linux only".to_owned()))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let directory = run_directory(run_root, run_id)?;
+        let record = read_record(&directory.join("run.json"))?;
+        if process_state(&record) != ProcessState::Running {
+            return Err(CathedralError::Manifest("workload is not running".to_owned()));
+        }
+        let terminals = pty_masters().lock()
+            .map_err(|_| CathedralError::Manifest("PTY registry lock was poisoned".to_owned()))?;
+        let master = terminals.get(run_id)
+            .ok_or_else(|| CathedralError::Manifest("PTY is no longer attached to this run".to_owned()))?;
+        let window = libc::winsize { ws_row: rows, ws_col: cols, ws_xpixel: 0, ws_ypixel: 0 };
+        if unsafe { libc::ioctl(master.as_raw_fd(), libc::TIOCSWINSZ as _, &window) } < 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        Ok(())
+    }
+}
+
 pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
