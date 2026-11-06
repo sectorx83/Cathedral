@@ -150,6 +150,12 @@ struct StdinRequest {
 struct StdinView {
     bytes_written: usize,
 }
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TerminalResizeRequest {
+    rows: u16,
+    cols: u16,
+}
 
 #[derive(Debug, Serialize)]
 struct SnapshotView {
@@ -377,6 +383,10 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
         .route(
             "/api/v1/experiments/:name/runs/:run_id/input",
             axum::routing::post(send_stdin),
+        )
+        .route(
+            "/api/v1/experiments/:name/runs/:run_id/terminal/resize",
+            axum::routing::post(resize_terminal),
         )
         .route(
             "/api/v1/experiments/:name/runs/:run_id/stop",
@@ -911,6 +921,27 @@ async fn send_stdin(
         runner::write_stdin(&run_root(&state.data_dir, &experiment), &run_id, bytes)?;
     Ok(Json(StdinView { bytes_written }))
 }
+async fn resize_terminal(
+    State(state): State<ApiState>,
+    AxumPath((name, run_id)): AxumPath<(String, String)>,
+    Json(request): Json<TerminalResizeRequest>,
+) -> Result<StatusCode, ApiError> {
+    if !(2..=200).contains(&request.rows) || !(2..=500).contains(&request.cols) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "terminal size must be between 2-200 rows and 2-500 columns",
+        ));
+    }
+    let (experiment, _) = experiment_workspace(&state.data_dir, &name)?;
+    runner::resize_terminal(
+        &run_root(&state.data_dir, &experiment),
+        &run_id,
+        request.rows,
+        request.cols,
+    )?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn get_logs(
     State(state): State<ApiState>,
     AxumPath((name, run_id)): AxumPath<(String, String)>,
