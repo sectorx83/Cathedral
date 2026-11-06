@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation is in place and its cross-platform CI verification remains pending. Phase 4 has started with a local authenticated Studio API and a React/TypeScript development preview; the native Tauri desktop application is not implemented yet. Windows and macOS workload isolation remain unsupported.
+> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed CI run [#226](https://github.com/sectorx83/Cathedral-/actions/runs/42218136492) on Linux, Windows, and macOS. Declared dependencies are recorded but not automatically resolved or installed. Phase 4 has started with a local authenticated Studio API and a React/TypeScript development preview; the native Tauri desktop application is not implemented yet. Windows and macOS workload isolation remain unsupported.
 
 ## What Cathedral is
 

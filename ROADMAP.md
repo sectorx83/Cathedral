@@ -82,7 +82,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 3: Snapshot & Reproduction Engine
 
-**Status: Implementation in progress; cross-platform CI verification pending.** The current revision implements filesystem checkpoints with SHA-256 manifests, snapshot listing/verification/comparison, staged restoration, portable `.cath` export/import, and strict OS/architecture checks for reproduction. Dependency declarations are preserved but not installed or resolved.
+**Status: Implemented; cross-platform CI verified in run [#226](https://github.com/sectorx83/Cathedral-/actions/runs/42218136492).** The implementation provides filesystem checkpoints with SHA-256 manifests, snapshot listing/verification/comparison, staged restoration, portable `.cath` export/import, and strict OS/architecture checks for reproduction. Declared dependencies are preserved but not installed or resolved; reproduction remains a compatibility-checked workspace import rather than a bit-for-bit machine recreation.
 
 **Objective:** Package experiment inputs and checkpoints so compatible machines can recreate an experiment and report differences.
 
