@@ -3,11 +3,11 @@
 //! The service binds to loopback only, requires a per-process bearer token,
 //! and exposes the same experiment registry, runtime, and snapshot engine as the CLI.
 
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Component, Path, PathBuf}, time::UNIX_EPOCH};
 
 use axum::{
     body::Body,
-    extract::{Path as AxumPath, State},
+    extract::{Path as AxumPath, Query, State},
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE},
         Method, Request, StatusCode,
@@ -219,6 +219,16 @@ struct LogsView {
     truncated: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct PathQuery { #[serde(default)] path: String }
+#[derive(Debug, Deserialize)]
+struct CompareQuery { a: String, b: String }
+#[derive(Debug, Serialize)]
+struct FileEntryView { name: String, path: String, kind: &'static str, size: u64, modified_at: Option<u64> }
+#[derive(Debug, Serialize)]
+struct FileContentView { path: String, content: String, bytes: usize }
+#[derive(Debug, Serialize)]
+struct DifferenceView { path: String, change: String }
 #[derive(Debug, Serialize)]
 struct StopView {
     run_id: String,
@@ -285,6 +295,10 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
             "/api/v1/experiments/:name/snapshots/:snapshot_id/restore",
             axum::routing::post(restore_snapshot),
         )
+        .route("/api/v1/experiments/:name/files", get(list_files))
+        .route("/api/v1/experiments/:name/files/content", get(read_file))
+        .route("/api/v1/experiments/:name/snapshots/:snapshot_id/verify", get(verify_snapshot))
+        .route("/api/v1/experiments/:name/snapshots/compare", get(compare_snapshots))
         .route(
             "/api/v1/experiments/:name/runs",
             get(list_runs).post(start_run),
@@ -297,6 +311,95 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
         .with_state(state)
         .layer(middleware::from_fn_with_state(token, require_bearer_token))
         .layer(cors)
+}
+
+
+fn safe_workspace_path(root: &Path, relative: &str) -> Result<PathBuf, ApiError> {
+    if relative.contains('\0') || relative.contains('\\') {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid workspace path"));
+    }
+    let relative_path = Path::new(relative);
+    if relative_path.is_absolute()
+        || (!relative.is_empty() && relative_path.components().any(|part| !matches!(part, Component::Normal(_))))
+    {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "workspace path must be relative"));
+    }
+    let canonical_root = root.canonicalize().map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let mut candidate = canonical_root.clone();
+    for part in relative_path.components() {
+        candidate.push(part);
+        let metadata = fs::symlink_metadata(&candidate).map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(ApiError::new(StatusCode::FORBIDDEN, "symbolic links are not exposed by the workspace browser"));
+        }
+    }
+    if !candidate.starts_with(&canonical_root) {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "workspace path escaped its root"));
+    }
+    Ok(candidate)
+}
+
+async fn list_files(
+    State(state): State<ApiState>,
+    AxumPath(name): AxumPath<String>,
+    Query(query): Query<PathQuery>,
+) -> Result<Json<Vec<FileEntryView>>, ApiError> {
+    let (_, workspace) = experiment_workspace(&state.data_dir, &name)?;
+    let directory = safe_workspace_path(&workspace, &query.path)?;
+    if !directory.is_dir() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "requested path is not a directory"));
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&directory).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        let entry = entry.map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let metadata = fs::symlink_metadata(entry.path()).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = if query.path.is_empty() { name.clone() } else { format!("{}/{}", query.path.trim_end_matches('/'), name) };
+        let kind = if metadata.file_type().is_symlink() { "symlink" } else if metadata.is_dir() { "directory" } else if metadata.is_file() { "file" } else { "special" };
+        let modified_at = metadata.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok()).map(|duration| duration.as_secs());
+        entries.push(FileEntryView { name, path, kind, size: metadata.len(), modified_at });
+    }
+    entries.sort_by(|a, b| (a.kind != "directory", a.name.to_lowercase()).cmp(&(b.kind != "directory", b.name.to_lowercase())));
+    Ok(Json(entries))
+}
+
+async fn read_file(
+    State(state): State<ApiState>,
+    AxumPath(name): AxumPath<String>,
+    Query(query): Query<PathQuery>,
+) -> Result<Json<FileContentView>, ApiError> {
+    let (_, workspace) = experiment_workspace(&state.data_dir, &name)?;
+    if query.path.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "a file path is required"));
+    }
+    let path = safe_workspace_path(&workspace, &query.path)?;
+    let metadata = fs::metadata(&path).map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    if !metadata.is_file() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "requested path is not a regular file"));
+    }
+    const MAX_PREVIEW_BYTES: u64 = 262_144;
+    if metadata.len() > MAX_PREVIEW_BYTES {
+        return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "file preview is limited to 256 KiB"));
+    }
+    let bytes = fs::read(&path).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let content = String::from_utf8(bytes).map_err(|_| ApiError::new(StatusCode::UNSUPPORTED_MEDIA_TYPE, "binary files cannot be previewed"))?;
+    Ok(Json(FileContentView { path: query.path, bytes: content.len(), content }))
+}
+
+async fn verify_snapshot(
+    State(state): State<ApiState>,
+    AxumPath((name, snapshot_id)): AxumPath<(String, String)>,
+) -> Result<Json<SnapshotView>, ApiError> {
+    Ok(Json(snapshot::verify(&state.data_dir, &name, &snapshot_id)?.into()))
+}
+
+async fn compare_snapshots(
+    State(state): State<ApiState>,
+    AxumPath(name): AxumPath<String>,
+    Query(query): Query<CompareQuery>,
+) -> Result<Json<Vec<DifferenceView>>, ApiError> {
+    let differences = snapshot::compare(&state.data_dir, &name, &query.a, &query.b)?;
+    Ok(Json(differences.into_iter().map(|item| DifferenceView { path: item.path, change: item.change }).collect()))
 }
 
 async fn health(State(_state): State<ApiState>) -> Json<HealthView> {

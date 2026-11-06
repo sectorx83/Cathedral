@@ -32,6 +32,10 @@ API version 1 routes:
 | GET | `/api/v1/experiments/{name}` | Inspect an experiment |
 | DELETE | `/api/v1/experiments/{name}` | Delete an experiment |
 | GET | `/api/v1/experiments/{name}/snapshots` | List snapshots |
+| GET | `/api/v1/experiments/{name}/snapshots/{id}/verify` | Verify snapshot integrity |
+| GET | `/api/v1/experiments/{name}/snapshots/compare?a={id}&b={id}` | Compare two snapshots |
+| GET | `/api/v1/experiments/{name}/files?path={relative}` | List workspace directory |
+| GET | `/api/v1/experiments/{name}/files/content?path={relative}` | Preview a text file (256 KiB maximum) |
 | POST | `/api/v1/experiments/{name}/snapshots` | Create a snapshot |
 | POST | `/api/v1/experiments/{name}/snapshots/{id}/restore` | Restore a snapshot |
 | GET | `/api/v1/experiments/{name}/runs` | List runs and latest metrics |
@@ -47,14 +51,14 @@ Run creation passes an argument vector to the existing runtime. It does not invo
 - All routes require a random bearer token generated for that process.
 - The token is emitted only in the startup-ready line and is not saved in the registry or workspace.
 - CORS is limited to Tauri origins and the standard Vite development origin. CORS is not authentication; the bearer token remains mandatory.
-- The API does not provide arbitrary filesystem paths, shell evaluation, or unrestricted host execution.
+- The API does not provide arbitrary filesystem paths, shell evaluation, or unrestricted host execution. The read-only file browser accepts only workspace-relative paths, rejects symlink traversal, limits text previews to 256 KiB, and does not preview binary files.
 - Linux execution retains the documented Bubblewrap/cgroup limitations. Windows and macOS execution remains unsupported.
 - Do not expose this service through a reverse proxy or bind it to a public interface.
 
 ## Next Phase 4 work
 
 1. Wrap the existing React/TypeScript Studio UI in a Tauri desktop shell.
-2. Add an experiment dashboard, lifecycle controls, filesystem browser, snapshot timeline, and log viewer.
+2. Extend the Studio dashboard with a read-only, path-confined filesystem browser, snapshot integrity verification/comparison, and log viewer. The native desktop shell and integrated terminal remain outstanding.
 3. Add streaming observability and graph history.
 4. Add permission-scoped extension interfaces and SDK.
 5. Package and verify platform-specific releases.

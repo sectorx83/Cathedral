@@ -119,7 +119,7 @@ A phase is complete only when its acceptance criteria are met, automated checks 
 
 ## Phase 4: Cathedral Studio & Ecosystem
 
-**Status: In progress.** The first increments add a loopback-only, bearer-token-authenticated Axum API and a React/TypeScript Studio preview connected to the existing experiment core, runtime, and snapshot engine. The native Tauri shell, streaming dashboard, extension system, and release packaging are not implemented yet. See [Phase 4 Studio](docs/PHASE_4_STUDIO.md).
+**Status: In progress.** The first increments add a loopback-only, bearer-token-authenticated Axum API and a React/TypeScript Studio client connected to the experiment core, runtime, and snapshot engine. The client now supports read-only workspace browsing, bounded text previews, snapshot verification, and snapshot comparison. The native Tauri shell, streaming dashboard, extension system, and release packaging are not implemented yet. See [Phase 4 Studio](docs/PHASE_4_STUDIO.md).
 
 **Objective:** Deliver a polished desktop experience and a safe extension model.
 
