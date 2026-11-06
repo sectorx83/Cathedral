@@ -18,9 +18,9 @@ use axum::{
     Json, Router,
 };
 use cathedral_core::{
-    create_experiment, delete_experiment, inspect_experiment, list_experiments,
-    manifest::Manifest, platform::PlatformInfo, registry::Experiment, runner, snapshot,
-    workspace::Workspace, CathedralError,
+    create_experiment, delete_experiment, inspect_experiment, list_experiments, manifest::Manifest,
+    platform::PlatformInfo, registry::Experiment, runner, snapshot, workspace::Workspace,
+    CathedralError,
 };
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -43,7 +43,10 @@ struct ApiError {
 
 impl ApiError {
     fn new(status: StatusCode, message: impl Into<String>) -> Self {
-        Self { status, message: message.into() }
+        Self {
+            status,
+            message: message.into(),
+        }
     }
 }
 
@@ -61,7 +64,13 @@ impl From<CathedralError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(ErrorBody { error: self.message })).into_response()
+        (
+            self.status,
+            Json(ErrorBody {
+                error: self.message,
+            }),
+        )
+            .into_response()
     }
 }
 
@@ -231,7 +240,8 @@ async fn require_bearer_token(
     request: Request<Body>,
     next: Next,
 ) -> Response {
-    let supplied = request.headers()
+    let supplied = request
+        .headers()
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "));
@@ -239,8 +249,11 @@ async fn require_bearer_token(
     if supplied != Some(token.as_str()) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(ErrorBody { error: "a valid bearer token is required".to_owned() }),
-        ).into_response();
+            Json(ErrorBody {
+                error: "a valid bearer token is required".to_owned(),
+            }),
+        )
+            .into_response();
     }
 
     next.run(request).await
@@ -264,11 +277,23 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
         .route("/api/v1/health", get(health))
         .route("/api/v1/experiments", get(list).post(create))
         .route("/api/v1/experiments/:name", get(inspect).delete(remove))
-        .route("/api/v1/experiments/:name/snapshots", get(list_snapshots).post(create_snapshot))
-        .route("/api/v1/experiments/:name/snapshots/:snapshot_id/restore", axum::routing::post(restore_snapshot))
-        .route("/api/v1/experiments/:name/runs", get(list_runs).post(start_run))
+        .route(
+            "/api/v1/experiments/:name/snapshots",
+            get(list_snapshots).post(create_snapshot),
+        )
+        .route(
+            "/api/v1/experiments/:name/snapshots/:snapshot_id/restore",
+            axum::routing::post(restore_snapshot),
+        )
+        .route(
+            "/api/v1/experiments/:name/runs",
+            get(list_runs).post(start_run),
+        )
         .route("/api/v1/experiments/:name/runs/:run_id/logs", get(get_logs))
-        .route("/api/v1/experiments/:name/runs/:run_id/stop", axum::routing::post(stop_run))
+        .route(
+            "/api/v1/experiments/:name/runs/:run_id/stop",
+            axum::routing::post(stop_run),
+        )
         .with_state(state)
         .layer(middleware::from_fn_with_state(token, require_bearer_token))
         .layer(cors)
@@ -382,7 +407,11 @@ async fn get_logs(
     } else {
         content
     };
-    Ok(Json(LogsView { run_id, content, truncated }))
+    Ok(Json(LogsView {
+        run_id,
+        content,
+        truncated,
+    }))
 }
 
 async fn stop_run(
@@ -391,7 +420,10 @@ async fn stop_run(
 ) -> Result<Json<StopView>, ApiError> {
     let (experiment, _) = experiment_workspace(&state.data_dir, &name)?;
     runner::stop(&run_root(&state.data_dir, &experiment), &run_id)?;
-    Ok(Json(StopView { run_id, stopped: true }))
+    Ok(Json(StopView {
+        run_id,
+        stopped: true,
+    }))
 }
 
 #[cfg(test)]
@@ -410,37 +442,51 @@ mod tests {
     #[tokio::test]
     async fn api_rejects_requests_without_a_bearer_token() {
         let temp = tempdir().unwrap();
-        let response = test_router(temp.path()).oneshot(
-            Request::builder().uri("/api/v1/health").body(Body::empty()).unwrap(),
-        ).await.unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn api_accepts_a_valid_token_and_reports_health() {
         let temp = tempdir().unwrap();
-        let response = test_router(temp.path()).oneshot(
-            Request::builder()
-                .uri("/api/v1/health")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty())
-                .unwrap(),
-        ).await.unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/health")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn api_creates_an_experiment() {
         let temp = tempdir().unwrap();
-        let response = test_router(temp.path()).oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/api/v1/experiments")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"name":"studio-lab","description":"Created by Studio"}"#))
-                .unwrap(),
-        ).await.unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/experiments")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"name":"studio-lab","description":"Created by Studio"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 }

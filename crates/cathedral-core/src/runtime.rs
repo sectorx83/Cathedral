@@ -62,7 +62,10 @@ impl RuntimeProbe {
 
 #[cfg(target_os = "linux")]
 fn inspect_linux() -> RuntimeProbe {
-    let bubblewrap = Command::new("bwrap").arg("--version").output().is_ok_and(|output| output.status.success());
+    let bubblewrap = Command::new("bwrap")
+        .arg("--version")
+        .output()
+        .is_ok_and(|output| output.status.success());
     let bubblewrap_namespaces = if bubblewrap {
         probe_bubblewrap()
     } else {
@@ -94,7 +97,11 @@ fn inspect_linux() -> RuntimeProbe {
         ProbeStatus::Unavailable
     };
     RuntimeProbe {
-        bubblewrap: if bubblewrap { ProbeStatus::Available } else { ProbeStatus::Unavailable },
+        bubblewrap: if bubblewrap {
+            ProbeStatus::Available
+        } else {
+            ProbeStatus::Unavailable
+        },
         bubblewrap_namespaces,
         unshare_binary: if unshare_installed {
             ProbeStatus::Available
@@ -104,7 +111,11 @@ fn inspect_linux() -> RuntimeProbe {
         user_pid_mount_namespaces,
         network_namespace,
         cgroup_v2,
-        cgroup_kill: if fs::metadata("/sys/fs/cgroup/cgroup.kill").is_ok() { ProbeStatus::Available } else { ProbeStatus::Unavailable },
+        cgroup_kill: if fs::metadata("/sys/fs/cgroup/cgroup.kill").is_ok() {
+            ProbeStatus::Available
+        } else {
+            ProbeStatus::Unavailable
+        },
         cpu_controller: controller_status(controllers.as_deref(), "cpu"),
         memory_controller: controller_status(controllers.as_deref(), "memory"),
     }
@@ -112,15 +123,34 @@ fn inspect_linux() -> RuntimeProbe {
 
 #[cfg(target_os = "linux")]
 fn probe_bubblewrap() -> ProbeStatus {
-    match Command::new("bwrap").args([
-        "--unshare-all", "--new-session", "--die-with-parent",
-        "--ro-bind", "/usr", "/usr",
-        "--dir", "/etc",
-        "--ro-bind-try", "/etc/passwd", "/etc/passwd",
-        "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-        "--clearenv", "--setenv", "PATH", "/usr/bin:/bin",
-        "--", "/usr/bin/true"
-    ]).output() {
+    match Command::new("bwrap")
+        .args([
+            "--unshare-all",
+            "--new-session",
+            "--die-with-parent",
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--dir",
+            "/etc",
+            "--ro-bind-try",
+            "/etc/passwd",
+            "/etc/passwd",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--tmpfs",
+            "/tmp",
+            "--clearenv",
+            "--setenv",
+            "PATH",
+            "/usr/bin:/bin",
+            "--",
+            "/usr/bin/true",
+        ])
+        .output()
+    {
         Ok(output) if output.status.success() => ProbeStatus::Available,
         Ok(_) | Err(_) => ProbeStatus::Unavailable,
     }

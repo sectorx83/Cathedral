@@ -4,13 +4,21 @@
 //! and network namespaces plus a restricted filesystem view. This is a
 //! container-style boundary, not a VM or a defense against kernel exploits.
 
-use crate::{CathedralError, Result};
 #[cfg(target_os = "linux")]
 use crate::manifest::Manifest;
+use crate::{CathedralError, Result};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 #[cfg(target_os = "linux")]
-use std::{fs::{File, OpenOptions}, io::{Read, Write}, process::{Command, Stdio}, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs::{File, OpenOptions},
+    io::{Read, Write},
+    process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunRecord {
@@ -74,13 +82,11 @@ fn ensure_real_directory(path: &Path) -> Result<PathBuf> {
             return Err(CathedralError::UnsafePath(path.to_path_buf()));
         }
         Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            match fs::create_dir(path) {
-                Ok(()) => {}
-                Err(create_error) if create_error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(create_error) => return Err(create_error.into()),
-            }
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => match fs::create_dir(path) {
+            Ok(()) => {}
+            Err(create_error) if create_error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(create_error) => return Err(create_error.into()),
+        },
         Err(error) => return Err(error.into()),
     }
     let metadata = fs::symlink_metadata(path)?;
@@ -91,8 +97,12 @@ fn ensure_real_directory(path: &Path) -> Result<PathBuf> {
 }
 
 fn validate_run_root(run_root: &Path) -> Result<PathBuf> {
-    let runs_parent = run_root.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
-    let data_root = runs_parent.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
+    let runs_parent = run_root
+        .parent()
+        .ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
+    let data_root = runs_parent
+        .parent()
+        .ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
     let canonical_data = data_root.canonicalize()?;
     let runs_metadata = fs::symlink_metadata(runs_parent)?;
     if runs_metadata.file_type().is_symlink() || !runs_metadata.is_dir() {
@@ -115,7 +125,9 @@ fn validate_run_root(run_root: &Path) -> Result<PathBuf> {
 
 #[cfg(target_os = "linux")]
 fn ensure_run_root(run_root: &Path) -> Result<PathBuf> {
-    let runs_parent = run_root.parent().ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
+    let runs_parent = run_root
+        .parent()
+        .ok_or_else(|| CathedralError::UnsafePath(run_root.to_path_buf()))?;
     ensure_real_directory(runs_parent)?;
     ensure_real_directory(run_root)?;
     validate_run_root(run_root)
@@ -123,12 +135,17 @@ fn ensure_run_root(run_root: &Path) -> Result<PathBuf> {
 
 fn run_directory(run_root: &Path, id: &str) -> Result<PathBuf> {
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
-        return Err(CathedralError::Manifest("invalid run identifier".to_owned()));
+        return Err(CathedralError::Manifest(
+            "invalid run identifier".to_owned(),
+        ));
     }
     let root = validate_run_root(run_root)?;
     let path = root.join(id);
     let metadata = fs::symlink_metadata(&path)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() || path.canonicalize()?.parent() != Some(root.as_path()) {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_dir()
+        || path.canonicalize()?.parent() != Some(root.as_path())
+    {
         return Err(CathedralError::UnsafePath(path));
     }
     Ok(path)
@@ -136,13 +153,20 @@ fn run_directory(run_root: &Path, id: &str) -> Result<PathBuf> {
 
 #[cfg(target_os = "linux")]
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().ok_or_else(|| {
-        CathedralError::Manifest("run metadata path has no parent".to_owned())
-    })?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| CathedralError::Manifest("run metadata path has no parent".to_owned()))?;
     fs::create_dir_all(parent)?;
-    let temporary = parent.join(format!(".{}.{}.tmp", path.file_name().unwrap_or_default().to_string_lossy(), uuid::Uuid::new_v4()));
+    let temporary = parent.join(format!(
+        ".{}.{}.tmp",
+        path.file_name().unwrap_or_default().to_string_lossy(),
+        uuid::Uuid::new_v4()
+    ));
     let result = (|| -> Result<()> {
-        let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
@@ -199,7 +223,9 @@ pub fn list_runs(run_root: &Path) -> Result<Vec<RunRecord>> {
 
 pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<RunRecord> {
     if command.is_empty() || command[0].trim().is_empty() {
-        return Err(CathedralError::Manifest("a non-empty command is required".to_owned()));
+        return Err(CathedralError::Manifest(
+            "a non-empty command is required".to_owned(),
+        ));
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -212,18 +238,26 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
     {
         let canonical_workspace = workspace.canonicalize()?;
         if !canonical_workspace.is_dir() {
-            return Err(CathedralError::Manifest("experiment workspace is not a directory".to_owned()));
+            return Err(CathedralError::Manifest(
+                "experiment workspace is not a directory".to_owned(),
+            ));
         }
         let bwrap = Command::new("bwrap").arg("--version").output()
             .map_err(|_| CathedralError::Manifest(
                 "bubblewrap (bwrap) is required for Linux isolation; install it and rerun cathedral doctor".to_owned()
             ))?;
         if !bwrap.status.success() {
-            return Err(CathedralError::Manifest("bubblewrap is installed but could not be executed".to_owned()));
+            return Err(CathedralError::Manifest(
+                "bubblewrap is installed but could not be executed".to_owned(),
+            ));
         }
 
         let manifest = Manifest::load(&canonical_workspace.join("cathedral.toml"))?;
-        let relative_workdir = manifest.environment.working_directory.as_deref().unwrap_or(".");
+        let relative_workdir = manifest
+            .environment
+            .working_directory
+            .as_deref()
+            .unwrap_or(".");
         let mut workdir = canonical_workspace.clone();
         for component in Path::new(relative_workdir).components() {
             match component {
@@ -235,16 +269,24 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
                             return Err(CathedralError::UnsafePath(workdir));
                         }
                         Ok(_) => {}
-                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir(&workdir)?,
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            fs::create_dir(&workdir)?
+                        }
                         Err(error) => return Err(error.into()),
                     }
                 }
-                _ => return Err(CathedralError::Manifest("working directory contains an unsafe path component".to_owned())),
+                _ => {
+                    return Err(CathedralError::Manifest(
+                        "working directory contains an unsafe path component".to_owned(),
+                    ))
+                }
             }
         }
         let canonical_workdir = workdir.canonicalize()?;
         if !canonical_workdir.starts_with(&canonical_workspace) {
-            return Err(CathedralError::Manifest("working directory resolves outside the experiment workspace".to_owned()));
+            return Err(CathedralError::Manifest(
+                "working directory resolves outside the experiment workspace".to_owned(),
+            ));
         }
 
         let canonical_run_root = ensure_run_root(run_root)?;
@@ -256,10 +298,13 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let stderr = log.try_clone()?;
 
         if manifest.resources.timeout_seconds.is_some() {
-            let supported = Command::new("timeout").arg("--help").output().is_ok_and(|output| {
-                String::from_utf8_lossy(&output.stdout).contains("--kill-after")
-                    || String::from_utf8_lossy(&output.stderr).contains("--kill-after")
-            });
+            let supported = Command::new("timeout")
+                .arg("--help")
+                .output()
+                .is_ok_and(|output| {
+                    String::from_utf8_lossy(&output.stdout).contains("--kill-after")
+                        || String::from_utf8_lossy(&output.stderr).contains("--kill-after")
+                });
             if !supported {
                 return Err(CathedralError::Manifest(
                     "this workload requests a timeout, but GNU coreutils timeout with --kill-after is unavailable".to_owned()
@@ -268,40 +313,78 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         }
         let cgroup_path = prepare_cgroup(&manifest)?;
         let mut child = Command::new("bwrap");
-        child.args([
-            "--unshare-all",
-            "--new-session",
-            "--die-with-parent",
-            "--ro-bind", "/usr", "/usr",
-            "--symlink", "usr/bin", "/bin",
-            "--symlink", "usr/sbin", "/sbin",
-            "--symlink", "usr/lib", "/lib",
-            "--symlink", "usr/lib64", "/lib64",
-            "--dir", "/etc",
-            "--ro-bind-try", "/etc/ssl", "/etc/ssl",
-            "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
-            "--ro-bind-try", "/etc/passwd", "/etc/passwd",
-            "--ro-bind-try", "/etc/group", "/etc/group",
-            "--ro-bind-try", "/etc/nsswitch.conf", "/etc/nsswitch.conf",
-            "--ro-bind-try", "/etc/localtime", "/etc/localtime",
-            "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
-            "--proc", "/proc",
-            "--dev", "/dev",
-            "--tmpfs", "/tmp",
-            "--dir", "/workspace",
-            "--bind",
-        ])
-        .arg(&canonical_workspace)
-        .arg("/workspace")
-        .args(["--chdir", "/workspace"])
-        .args(["--clearenv", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin"])
-        .args(["--setenv", "HOME", "/workspace"])
-        .args(["--setenv", "TMPDIR", "/tmp"]);
+        child
+            .args([
+                "--unshare-all",
+                "--new-session",
+                "--die-with-parent",
+                "--ro-bind",
+                "/usr",
+                "/usr",
+                "--symlink",
+                "usr/bin",
+                "/bin",
+                "--symlink",
+                "usr/sbin",
+                "/sbin",
+                "--symlink",
+                "usr/lib",
+                "/lib",
+                "--symlink",
+                "usr/lib64",
+                "/lib64",
+                "--dir",
+                "/etc",
+                "--ro-bind-try",
+                "/etc/ssl",
+                "/etc/ssl",
+                "--ro-bind-try",
+                "/etc/ca-certificates",
+                "/etc/ca-certificates",
+                "--ro-bind-try",
+                "/etc/passwd",
+                "/etc/passwd",
+                "--ro-bind-try",
+                "/etc/group",
+                "/etc/group",
+                "--ro-bind-try",
+                "/etc/nsswitch.conf",
+                "/etc/nsswitch.conf",
+                "--ro-bind-try",
+                "/etc/localtime",
+                "/etc/localtime",
+                "--ro-bind-try",
+                "/etc/ld.so.cache",
+                "/etc/ld.so.cache",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--tmpfs",
+                "/tmp",
+                "--dir",
+                "/workspace",
+                "--bind",
+            ])
+            .arg(&canonical_workspace)
+            .arg("/workspace")
+            .args(["--chdir", "/workspace"])
+            .args([
+                "--clearenv",
+                "--setenv",
+                "PATH",
+                "/usr/local/bin:/usr/bin:/bin",
+            ])
+            .args(["--setenv", "HOME", "/workspace"])
+            .args(["--setenv", "TMPDIR", "/tmp"]);
         for (key, value) in &manifest.environment.variables {
             child.arg("--setenv").arg(key).arg(value);
         }
-        let relative = canonical_workdir.strip_prefix(&canonical_workspace)
-            .map_err(|_| CathedralError::Manifest("working directory escaped workspace".to_owned()))?;
+        let relative = canonical_workdir
+            .strip_prefix(&canonical_workspace)
+            .map_err(|_| {
+                CathedralError::Manifest("working directory escaped workspace".to_owned())
+            })?;
         let sandbox_workdir = if relative.as_os_str().is_empty() {
             "/workspace".to_owned()
         } else {
@@ -309,7 +392,10 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         };
         child.arg("--chdir").arg(&sandbox_workdir).arg("--");
         child.args(command);
-        let bwrap_args = child.get_args().map(|arg| arg.to_os_string()).collect::<Vec<_>>();
+        let bwrap_args = child
+            .get_args()
+            .map(|arg| arg.to_os_string())
+            .collect::<Vec<_>>();
         let status_path = directory.join("exit-status");
         let mut supervisor = Command::new("/bin/sh");
         supervisor
@@ -330,16 +416,25 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             use std::os::unix::{ffi::OsStrExt, process::CommandExt};
             supervisor.process_group(0);
             if let Some(path) = &cgroup_path {
-                let control_file = std::ffi::CString::new(path.join("cgroup.procs").as_os_str().as_bytes())
-                    .map_err(|_| CathedralError::Manifest("cgroup path contains a null byte".to_owned()))?;
+                let control_file =
+                    std::ffi::CString::new(path.join("cgroup.procs").as_os_str().as_bytes())
+                        .map_err(|_| {
+                            CathedralError::Manifest("cgroup path contains a null byte".to_owned())
+                        })?;
                 unsafe {
                     supervisor.pre_exec(move || {
-                        let fd = libc::open(control_file.as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC);
-                        if fd < 0 { return Err(std::io::Error::last_os_error()); }
+                        let fd =
+                            libc::open(control_file.as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC);
+                        if fd < 0 {
+                            return Err(std::io::Error::last_os_error());
+                        }
                         let mut buffer = [0u8; 20];
                         let mut value = libc::getpid() as u32;
                         let mut cursor = buffer.len();
-                        if value == 0 { cursor -= 1; buffer[cursor] = b'0'; }
+                        if value == 0 {
+                            cursor -= 1;
+                            buffer[cursor] = b'0';
+                        }
                         while value > 0 {
                             cursor -= 1;
                             buffer[cursor] = b'0' + (value % 10) as u8;
@@ -359,8 +454,12 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let process = match supervisor.spawn() {
             Ok(process) => process,
             Err(error) => {
-                if let Some(path) = &cgroup_path { let _ = fs::remove_dir(path); }
-                return Err(CathedralError::Manifest(format!("failed to start isolated workload: {error}")));
+                if let Some(path) = &cgroup_path {
+                    let _ = fs::remove_dir(path);
+                }
+                return Err(CathedralError::Manifest(format!(
+                    "failed to start isolated workload: {error}"
+                )));
             }
         };
         let supervisor_pid = process.id();
@@ -369,7 +468,9 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         if let Some(path) = &cgroup_path {
             if let Err(error) = spawn_cgroup_reaper(path, supervisor_pid, supervisor_start_ticks) {
                 let _ = fs::write(path.join("cgroup.kill"), "1");
-                let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
+                let _ = Command::new("kill")
+                    .args(["-TERM", "--", &format!("-{supervisor_pid}")])
+                    .status();
                 return Err(error);
             }
         }
@@ -394,7 +495,9 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             if let Some(path) = &record.cgroup_path {
                 let _ = fs::write(PathBuf::from(path).join("cgroup.kill"), "1");
             }
-            let _ = Command::new("kill").args(["-TERM", "--", &format!("-{supervisor_pid}")]).status();
+            let _ = Command::new("kill")
+                .args(["-TERM", "--", &format!("-{supervisor_pid}")])
+                .status();
             return Err(error);
         }
         Ok(record)
@@ -404,7 +507,9 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
 #[cfg(target_os = "linux")]
 fn spawn_cgroup_reaper(path: &Path, supervisor_pid: u32, start_ticks: u64) -> Result<()> {
     use std::os::unix::process::CommandExt;
-    if start_ticks == 0 { return Ok(()); }
+    if start_ticks == 0 {
+        return Ok(());
+    }
     let script = r#"
 pid="$1"
 expected="$2"
@@ -443,9 +548,11 @@ fi
         .process_group(0)
         .spawn()
         .map(|_| ())
-        .map_err(|error| CathedralError::Manifest(format!(
-            "workload started, but automatic cgroup cleanup helper could not start: {error}"
-        )))
+        .map_err(|error| {
+            CathedralError::Manifest(format!(
+                "workload started, but automatic cgroup cleanup helper could not start: {error}"
+            ))
+        })
 }
 #[cfg(target_os = "linux")]
 fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
@@ -459,7 +566,9 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        Err(CathedralError::Manifest("hard resource limits currently require Linux cgroup v2".to_owned()))
+        Err(CathedralError::Manifest(
+            "hard resource limits currently require Linux cgroup v2".to_owned(),
+        ))
     }
     #[cfg(target_os = "linux")]
     {
@@ -467,7 +576,9 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
             "resource limits were requested but CATHEDRAL_CGROUP_ROOT is not configured to a delegated cgroup v2 directory".to_owned()))?;
         let root = PathBuf::from(configured).canonicalize()?;
         if !root.join("cgroup.controllers").is_file() || !root.join("cgroup.procs").is_file() {
-            return Err(CathedralError::Manifest("CATHEDRAL_CGROUP_ROOT is not a cgroup v2 directory".to_owned()));
+            return Err(CathedralError::Manifest(
+                "CATHEDRAL_CGROUP_ROOT is not a cgroup v2 directory".to_owned(),
+            ));
         }
         let path = root.join(format!("cathedral-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&path)?;
@@ -478,17 +589,23 @@ fn prepare_cgroup(manifest: &Manifest) -> Result<Option<PathBuf>> {
             ));
         }
         let configured_limits = (|| -> Result<()> {
-            if let Some(value) = limits.memory_max_bytes { fs::write(path.join("memory.max"), value.to_string())?; }
+            if let Some(value) = limits.memory_max_bytes {
+                fs::write(path.join("memory.max"), value.to_string())?;
+            }
             if let Some(value) = limits.cpu_quota_percent {
                 let quota = u64::from(value) * 1000;
                 fs::write(path.join("cpu.max"), format!("{quota} 100000"))?;
             }
-            if let Some(value) = limits.pids_max { fs::write(path.join("pids.max"), value.to_string())?; }
+            if let Some(value) = limits.pids_max {
+                fs::write(path.join("pids.max"), value.to_string())?;
+            }
             Ok(())
         })();
         if let Err(error) = configured_limits {
             let _ = fs::remove_dir(&path);
-            return Err(CathedralError::Manifest(format!("could not enforce requested cgroup v2 limits: {error}")));
+            return Err(CathedralError::Manifest(format!(
+                "could not enforce requested cgroup v2 limits: {error}"
+            )));
         }
         Ok(Some(path))
     }
@@ -510,27 +627,41 @@ fn cgroup_has_members(path: &Path) -> bool {
 pub fn process_state(record: &RunRecord) -> ProcessState {
     #[cfg(target_os = "linux")]
     {
-        let supervisor_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
+        let supervisor_pid = if record.supervisor_pid == 0 {
+            record.pid
+        } else {
+            record.supervisor_pid
+        };
         if let Some(ticks) = proc_start_ticks(supervisor_pid) {
             if record.supervisor_start_ticks != 0 && ticks != record.supervisor_start_ticks {
                 return ProcessState::ProcessIdentityChanged;
             }
             if matches!(proc_state(supervisor_pid), Some('Z' | 'X')) {
                 if let Some(path) = &record.cgroup_path {
-                    return if cgroup_has_members(Path::new(path)) { ProcessState::Running } else { ProcessState::Finished };
+                    return if cgroup_has_members(Path::new(path)) {
+                        ProcessState::Running
+                    } else {
+                        ProcessState::Finished
+                    };
                 }
                 return ProcessState::Finished;
             }
             return ProcessState::Running;
         }
         if let Some(path) = &record.cgroup_path {
-            if cgroup_has_members(Path::new(path)) { return ProcessState::Running; }
+            if cgroup_has_members(Path::new(path)) {
+                return ProcessState::Running;
+            }
         }
         let group_exists = unsafe {
             libc::kill(-(supervisor_pid as i32), 0) == 0
                 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
         };
-        if group_exists { ProcessState::Running } else { ProcessState::Finished }
+        if group_exists {
+            ProcessState::Running
+        } else {
+            ProcessState::Finished
+        }
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -540,7 +671,9 @@ pub fn process_state(record: &RunRecord) -> ProcessState {
 }
 
 pub fn cleanup_finished(record: &RunRecord) -> Result<()> {
-    if process_state(record) != ProcessState::Finished { return Ok(()); }
+    if process_state(record) != ProcessState::Finished {
+        return Ok(());
+    }
     if let Some(path) = &record.cgroup_path {
         let path = PathBuf::from(path);
         let metadata = match fs::symlink_metadata(&path) {
@@ -572,7 +705,9 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (run_root, run_id);
-        Err(CathedralError::Manifest("process control is currently supported on Linux only".to_owned()))
+        Err(CathedralError::Manifest(
+            "process control is currently supported on Linux only".to_owned(),
+        ))
     }
     #[cfg(target_os = "linux")]
     {
@@ -581,12 +716,17 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
         match process_state(&record) {
             ProcessState::Finished => return Ok(()),
             ProcessState::ProcessIdentityChanged => {
-                return Err(CathedralError::Manifest("refusing to signal a reused PID".to_owned()));
+                return Err(CathedralError::Manifest(
+                    "refusing to signal a reused PID".to_owned(),
+                ));
             }
             ProcessState::Running => {}
         }
         if record.supervisor_start_ticks == 0 && record.cgroup_path.is_none() {
-            return Err(CathedralError::Manifest("cannot verify workload PID identity; refusing to signal a possibly reused PID".to_owned()));
+            return Err(CathedralError::Manifest(
+                "cannot verify workload PID identity; refusing to signal a possibly reused PID"
+                    .to_owned(),
+            ));
         }
         if let Some(path) = &record.cgroup_path {
             let cgroup = PathBuf::from(path);
@@ -607,23 +747,31 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
             for _ in 0..500 {
                 let members = fs::read_to_string(cgroup.join("cgroup.procs"))?;
                 if members.trim().is_empty() {
-                    fs::remove_dir(&cgroup).map_err(|error| CathedralError::Manifest(format!(
-                        "workload stopped but its cgroup could not be removed: {error}"
-                    )))?;
+                    fs::remove_dir(&cgroup).map_err(|error| {
+                        CathedralError::Manifest(format!(
+                            "workload stopped but its cgroup could not be removed: {error}"
+                        ))
+                    })?;
                     return Ok(());
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
             return Err(CathedralError::Manifest(
-                "cgroup.kill was requested but processes remained after five seconds".to_owned()
+                "cgroup.kill was requested but processes remained after five seconds".to_owned(),
             ));
         }
-        let supervisor_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
+        let supervisor_pid = if record.supervisor_pid == 0 {
+            record.pid
+        } else {
+            record.supervisor_pid
+        };
         let status = Command::new("kill")
             .args(["-TERM", "--", &format!("-{supervisor_pid}")])
             .status()?;
         if !status.success() {
-            return Err(CathedralError::Manifest("failed to send SIGTERM to the workload process group".to_owned()));
+            return Err(CathedralError::Manifest(
+                "failed to send SIGTERM to the workload process group".to_owned(),
+            ));
         }
         if !record.exit_status_file.is_empty() {
             let _ = fs::write(&record.exit_status_file, "signal:SIGTERM\n");
@@ -632,7 +780,9 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
             match process_state(&record) {
                 ProcessState::Finished => return Ok(()),
                 ProcessState::ProcessIdentityChanged => {
-                    return Err(CathedralError::Manifest("workload PID identity changed while stopping".to_owned()));
+                    return Err(CathedralError::Manifest(
+                        "workload PID identity changed while stopping".to_owned(),
+                    ));
                 }
                 ProcessState::Running => std::thread::sleep(std::time::Duration::from_millis(50)),
             }
@@ -641,34 +791,49 @@ pub fn stop(run_root: &Path, run_id: &str) -> Result<()> {
             .args(["-KILL", "--", &format!("-{supervisor_pid}")])
             .status()?;
         if !status.success() {
-            return Err(CathedralError::Manifest("workload did not stop after SIGTERM and SIGKILL failed".to_owned()));
+            return Err(CathedralError::Manifest(
+                "workload did not stop after SIGTERM and SIGKILL failed".to_owned(),
+            ));
         }
         for _ in 0..100 {
             match process_state(&record) {
                 ProcessState::Finished => return Ok(()),
                 ProcessState::ProcessIdentityChanged => {
-                    return Err(CathedralError::Manifest("workload PID identity changed while stopping".to_owned()));
+                    return Err(CathedralError::Manifest(
+                        "workload PID identity changed while stopping".to_owned(),
+                    ));
                 }
                 ProcessState::Running => std::thread::sleep(std::time::Duration::from_millis(10)),
             }
         }
-        Err(CathedralError::Manifest("workload process group remained after SIGKILL".to_owned()))
+        Err(CathedralError::Manifest(
+            "workload process group remained after SIGKILL".to_owned(),
+        ))
     }
 }
 
 pub fn exit_status(record: &RunRecord) -> Option<i32> {
-    if record.exit_status_file.is_empty() { return None; }
-    fs::read_to_string(&record.exit_status_file).ok()?.trim().parse().ok()
+    if record.exit_status_file.is_empty() {
+        return None;
+    }
+    fs::read_to_string(&record.exit_status_file)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 pub fn termination_signal(record: &RunRecord) -> Option<String> {
-    if record.exit_status_file.is_empty() { return None; }
+    if record.exit_status_file.is_empty() {
+        return None;
+    }
     let value = fs::read_to_string(&record.exit_status_file).ok()?;
     value.trim().strip_prefix("signal:").map(str::to_owned)
 }
 
 pub fn timed_out(record: &RunRecord) -> bool {
-    record.timeout_seconds.is_some() && exit_status(record).is_some_and(|code| code == 124 || code == 137)
+    record.timeout_seconds.is_some()
+        && exit_status(record).is_some_and(|code| code == 124 || code == 137)
 }
 pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
     let directory = run_directory(run_root, run_id)?;
@@ -685,31 +850,46 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = record;
-        Err(CathedralError::Manifest("process inspection is currently supported on Linux only".to_owned()))
+        Err(CathedralError::Manifest(
+            "process inspection is currently supported on Linux only".to_owned(),
+        ))
     }
     #[cfg(target_os = "linux")]
     {
-        if record.cgroup_path.is_none() && process_state(record) == ProcessState::ProcessIdentityChanged {
+        if record.cgroup_path.is_none()
+            && process_state(record) == ProcessState::ProcessIdentityChanged
+        {
             return Ok(Vec::new());
         }
         let pids: Vec<u32> = if let Some(path) = &record.cgroup_path {
             match fs::read_to_string(PathBuf::from(path).join("cgroup.procs")) {
-                Ok(contents) => contents.lines().filter_map(|line| line.trim().parse().ok()).collect(),
+                Ok(contents) => contents
+                    .lines()
+                    .filter_map(|line| line.trim().parse().ok())
+                    .collect(),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
                 Err(error) => return Err(error.into()),
             }
         } else {
-            let root_pid = if record.supervisor_pid == 0 { record.pid } else { record.supervisor_pid };
+            let root_pid = if record.supervisor_pid == 0 {
+                record.pid
+            } else {
+                record.supervisor_pid
+            };
             process_tree_pids(root_pid)?
         };
         let mut result = Vec::new();
         for pid in pids {
-            if matches!(proc_state(pid), Some('Z' | 'X')) { continue; }
+            if matches!(proc_state(pid), Some('Z' | 'X')) {
+                continue;
+            }
             let mut process_record = record.clone();
             process_record.pid = pid;
             process_record.process_start_ticks = proc_start_ticks(pid).unwrap_or(0);
             process_record.cgroup_path = None;
-            if let Some(snapshot) = metrics(&process_record)? { result.push(snapshot); }
+            if let Some(snapshot) = metrics(&process_record)? {
+                result.push(snapshot);
+            }
         }
         result.sort_by_key(|item| item.pid);
         Ok(result)
@@ -717,14 +897,22 @@ pub fn processes(record: &RunRecord) -> Result<Vec<ProcessMetrics>> {
 }
 #[cfg(target_os = "linux")]
 fn parse_network_device_bytes(contents: &str) -> (u64, u64) {
-    contents.lines().filter_map(|line| {
-        let (_, counters) = line.split_once(':')?;
-        let fields: Vec<_> = counters.split_whitespace().collect();
-        if fields.len() < 9 { return None; }
-        Some((fields[0].parse::<u64>().ok()?, fields[8].parse::<u64>().ok()?))
-    }).fold((0u64, 0u64), |(rx, tx), (next_rx, next_tx)| {
-        (rx.saturating_add(next_rx), tx.saturating_add(next_tx))
-    })
+    contents
+        .lines()
+        .filter_map(|line| {
+            let (_, counters) = line.split_once(':')?;
+            let fields: Vec<_> = counters.split_whitespace().collect();
+            if fields.len() < 9 {
+                return None;
+            }
+            Some((
+                fields[0].parse::<u64>().ok()?,
+                fields[8].parse::<u64>().ok()?,
+            ))
+        })
+        .fold((0u64, 0u64), |(rx, tx), (next_rx, next_tx)| {
+            (rx.saturating_add(next_rx), tx.saturating_add(next_tx))
+        })
 }
 
 #[cfg(target_os = "linux")]
@@ -742,7 +930,9 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
     #[cfg(target_os = "linux")]
     {
         let root = PathBuf::from(format!("/proc/{}", record.pid));
-        let Some(start) = proc_start_ticks(record.pid) else { return Ok(None); };
+        let Some(start) = proc_start_ticks(record.pid) else {
+            return Ok(None);
+        };
         if record.process_start_ticks != 0 && start != record.process_start_ticks {
             return Ok(None);
         }
@@ -756,39 +946,63 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error.into()),
         };
-        if proc_start_ticks(record.pid) != Some(start) { return Ok(None); }
+        if proc_start_ticks(record.pid) != Some(start) {
+            return Ok(None);
+        }
         let io = fs::read_to_string(root.join("io")).unwrap_or_default();
         let (network_rx_bytes, network_tx_bytes) = proc_network_device_bytes(record.pid);
-        let state = stat.split_once(") ").map(|(_, rest)| rest.split_whitespace().next().unwrap_or("?").to_owned()).unwrap_or_else(|| "?".to_owned());
-        let fields: Vec<&str> = stat.split_once(") ").map(|(_, rest)| rest.split_whitespace().collect()).unwrap_or_default();
+        let state = stat
+            .split_once(") ")
+            .map(|(_, rest)| rest.split_whitespace().next().unwrap_or("?").to_owned())
+            .unwrap_or_else(|| "?".to_owned());
+        let fields: Vec<&str> = stat
+            .split_once(") ")
+            .map(|(_, rest)| rest.split_whitespace().collect())
+            .unwrap_or_default();
         let parent_pid = fields.get(1).and_then(|v| v.parse().ok()).unwrap_or(0);
         let user_cpu_ticks = fields.get(11).and_then(|v| v.parse().ok()).unwrap_or(0);
         let system_cpu_ticks = fields.get(12).and_then(|v| v.parse().ok()).unwrap_or(0);
         let value_kb = |key: &str| -> u64 {
-            status.lines().find_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                (name == key).then(|| value.split_whitespace().next()?.parse().ok()).flatten()
-            }).unwrap_or(0)
+            status
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    (name == key)
+                        .then(|| value.split_whitespace().next()?.parse().ok())
+                        .flatten()
+                })
+                .unwrap_or(0)
         };
         let io_value = |key: &str| -> u64 {
-            io.lines().find_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                (name == key).then(|| value.trim().parse().ok()).flatten()
-            }).unwrap_or(0)
+            io.lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    (name == key).then(|| value.trim().parse().ok()).flatten()
+                })
+                .unwrap_or(0)
         };
         let cgroup_memory_current_bytes = record.cgroup_path.as_ref().and_then(|path| {
-            fs::read_to_string(PathBuf::from(path).join("memory.current")).ok()?.trim().parse().ok()
+            fs::read_to_string(PathBuf::from(path).join("memory.current"))
+                .ok()?
+                .trim()
+                .parse()
+                .ok()
         });
         let cgroup_cpu_usage_usec = record.cgroup_path.as_ref().and_then(|path| {
-            fs::read_to_string(PathBuf::from(path).join("cpu.stat")).ok()?.lines().find_map(|line| {
-                let mut fields = line.split_whitespace();
-                (fields.next()? == "usage_usec").then(|| fields.next()?.parse().ok()).flatten()
-            })
+            fs::read_to_string(PathBuf::from(path).join("cpu.stat"))
+                .ok()?
+                .lines()
+                .find_map(|line| {
+                    let mut fields = line.split_whitespace();
+                    (fields.next()? == "usage_usec")
+                        .then(|| fields.next()?.parse().ok())
+                        .flatten()
+                })
         });
         let cgroup_process_count = record.cgroup_path.as_ref().and_then(|path| {
-            fs::read_to_string(PathBuf::from(path).join("cgroup.procs")).ok().map(|value| {
-                value.lines().filter(|line| !line.trim().is_empty()).count() as u64
-            })
+            fs::read_to_string(PathBuf::from(path).join("cgroup.procs"))
+                .ok()
+                .map(|value| value.lines().filter(|line| !line.trim().is_empty()).count() as u64)
         });
         let snapshot = ProcessMetrics {
             pid: record.pid,
@@ -807,7 +1021,10 @@ pub fn metrics(record: &RunRecord) -> Result<Option<ProcessMetrics>> {
             cgroup_process_count,
         };
         let history_path = PathBuf::from(&record.log_file).with_file_name("metrics.jsonl");
-        let mut history = OpenOptions::new().create(true).append(true).open(history_path)?;
+        let mut history = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(history_path)?;
         let history_line = serde_json::json!({
             "timestamp": now_seconds(),
             "pid": snapshot.pid,
@@ -836,11 +1053,24 @@ fn process_tree_pids(root_pid: u32) -> Result<Vec<u32>> {
         let mut changed = false;
         for entry in fs::read_dir("/proc")? {
             let entry = entry?;
-            let Some(pid) = entry.file_name().to_str().and_then(|value| value.parse::<u32>().ok()) else { continue; };
-            if found.contains(&pid) { continue; }
-            if proc_parent_pid(pid).is_some_and(|parent| found.contains(&parent)) { found.insert(pid); changed = true; }
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|value| value.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            if found.contains(&pid) {
+                continue;
+            }
+            if proc_parent_pid(pid).is_some_and(|parent| found.contains(&parent)) {
+                found.insert(pid);
+                changed = true;
+            }
         }
-        if !changed { break; }
+        if !changed {
+            break;
+        }
     }
     let mut pids: Vec<_> = found.into_iter().collect();
     pids.sort_unstable();
@@ -856,11 +1086,27 @@ fn proc_parent_pid(pid: u32) -> Option<u32> {
 #[cfg(target_os = "linux")]
 fn wait_for_workload_pid(supervisor_pid: u32) -> Option<u32> {
     for _ in 0..100 {
-        let children = fs::read_to_string(format!("/proc/{supervisor_pid}/task/{supervisor_pid}/children")).ok()?;
-        if let Some(bwrap_pid) = children.split_whitespace().next().and_then(|value| value.parse::<u32>().ok()) {
-            let nested = fs::read_to_string(format!("/proc/{bwrap_pid}/task/{bwrap_pid}/children")).unwrap_or_default();
-            if let Some(pid) = nested.split_whitespace().next().and_then(|value| value.parse().ok()) { return Some(pid); }
-            if proc_start_ticks(bwrap_pid).is_none() { return Some(bwrap_pid); }
+        let children = fs::read_to_string(format!(
+            "/proc/{supervisor_pid}/task/{supervisor_pid}/children"
+        ))
+        .ok()?;
+        if let Some(bwrap_pid) = children
+            .split_whitespace()
+            .next()
+            .and_then(|value| value.parse::<u32>().ok())
+        {
+            let nested = fs::read_to_string(format!("/proc/{bwrap_pid}/task/{bwrap_pid}/children"))
+                .unwrap_or_default();
+            if let Some(pid) = nested
+                .split_whitespace()
+                .next()
+                .and_then(|value| value.parse().ok())
+            {
+                return Some(pid);
+            }
+            if proc_start_ticks(bwrap_pid).is_none() {
+                return Some(bwrap_pid);
+            }
         }
         proc_start_ticks(supervisor_pid)?;
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -876,14 +1122,20 @@ fn proc_state(pid: u32) -> Option<char> {
 #[cfg(target_os = "linux")]
 fn proc_start_ticks(pid: u32) -> Option<u64> {
     let mut stat = String::new();
-    File::open(format!("/proc/{pid}/stat")).ok()?.read_to_string(&mut stat).ok()?;
+    File::open(format!("/proc/{pid}/stat"))
+        .ok()?
+        .read_to_string(&mut stat)
+        .ok()?;
     let (_, rest) = stat.rsplit_once(") ")?;
     rest.split_whitespace().nth(19)?.parse().ok()
 }
 
 #[cfg(target_os = "linux")]
 fn now_seconds() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 #[cfg(test)]
@@ -891,14 +1143,34 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     fn bubblewrap_works() -> bool {
-        Command::new("bwrap").args([
-            "--unshare-all", "--new-session", "--die-with-parent",
-            "--ro-bind", "/usr", "/usr",
-            "--dir", "/etc", "--ro-bind-try", "/etc/passwd", "/etc/passwd",
-            "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-            "--clearenv", "--setenv", "PATH", "/usr/bin:/bin",
-            "--", "/usr/bin/true"
-        ]).status().is_ok_and(|status| status.success())
+        Command::new("bwrap")
+            .args([
+                "--unshare-all",
+                "--new-session",
+                "--die-with-parent",
+                "--ro-bind",
+                "/usr",
+                "/usr",
+                "--dir",
+                "/etc",
+                "--ro-bind-try",
+                "/etc/passwd",
+                "/etc/passwd",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--tmpfs",
+                "/tmp",
+                "--clearenv",
+                "--setenv",
+                "PATH",
+                "/usr/bin:/bin",
+                "--",
+                "/usr/bin/true",
+            ])
+            .status()
+            .is_ok_and(|status| status.success())
     }
 
     #[test]
@@ -951,10 +1223,15 @@ mod tests {
         spawn_cgroup_reaper(&cgroup, child.id(), start_ticks).unwrap();
         child.wait().unwrap();
         for _ in 0..150 {
-            if !cgroup.exists() { break; }
+            if !cgroup.exists() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        assert!(!cgroup.exists(), "detached reaper left an empty cgroup behind");
+        assert!(
+            !cgroup.exists(),
+            "detached reaper left an empty cgroup behind"
+        );
     }
     #[cfg(target_os = "linux")]
     #[test]
@@ -977,56 +1254,112 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn launches_and_captures_a_bubblewrap_workload_when_available() {
-        let available = Command::new("bwrap").args([
-            "--unshare-all", "--new-session", "--ro-bind", "/usr", "/usr",
-            "--symlink", "usr/bin", "/bin", "--dir", "/etc",
-            "--ro-bind-try", "/etc/passwd", "/etc/passwd",
-            "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-            "--", "/usr/bin/true"
-        ]).status().is_ok_and(|status| status.success());
-        if !available { return; }
+        let available = Command::new("bwrap")
+            .args([
+                "--unshare-all",
+                "--new-session",
+                "--ro-bind",
+                "/usr",
+                "/usr",
+                "--symlink",
+                "usr/bin",
+                "/bin",
+                "--dir",
+                "/etc",
+                "--ro-bind-try",
+                "/etc/passwd",
+                "/etc/passwd",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--tmpfs",
+                "/tmp",
+                "--",
+                "/usr/bin/true",
+            ])
+            .status()
+            .is_ok_and(|status| status.success());
+        if !available {
+            return;
+        }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path();
-        Manifest::minimal("runtime-test").write_to(&workspace.join("cathedral.toml")).unwrap();
+        Manifest::minimal("runtime-test")
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
         let run_root = temp.path().join("data").join("runs").join("runtime-test");
         fs::create_dir_all(run_root.parent().unwrap()).unwrap();
-        let record = launch(workspace, &run_root, &["/usr/bin/printf".to_owned(), "cathedral-runtime-ok".to_owned()]).unwrap();
+        let record = launch(
+            workspace,
+            &run_root,
+            &[
+                "/usr/bin/printf".to_owned(),
+                "cathedral-runtime-ok".to_owned(),
+            ],
+        )
+        .unwrap();
         let mut output = String::new();
         for _ in 0..100 {
             output = logs(&run_root, &record.id).unwrap();
-            if output.contains("cathedral-runtime-ok") && exit_status(&record).is_some() { break; }
+            if output.contains("cathedral-runtime-ok") && exit_status(&record).is_some() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        assert!(output.contains("cathedral-runtime-ok"), "workload output was not captured: {output}");
+        assert!(
+            output.contains("cathedral-runtime-ok"),
+            "workload output was not captured: {output}"
+        );
         assert_eq!(exit_status(&record), Some(0));
         assert!(record.pid > 0);
 
         let failing = launch(workspace, &run_root, &["/usr/bin/false".to_owned()]).unwrap();
         for _ in 0..100 {
-            if exit_status(&failing).is_some() { break; }
+            if exit_status(&failing).is_some() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(exit_status(&failing), Some(1));
 
-        let sleeping = launch(workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        let sleeping = launch(
+            workspace,
+            &run_root,
+            &["/usr/bin/sleep".to_owned(), "30".to_owned()],
+        )
+        .unwrap();
         assert_eq!(process_state(&sleeping), ProcessState::Running);
         assert!(metrics(&sleeping).unwrap().is_some());
         assert!(!processes(&sleeping).unwrap().is_empty());
         let history = PathBuf::from(&sleeping.log_file).with_file_name("metrics.jsonl");
-        assert!(fs::read_to_string(history).unwrap().contains("network_rx_bytes"));
+        assert!(fs::read_to_string(history)
+            .unwrap()
+            .contains("network_rx_bytes"));
         stop(&run_root, &sleeping.id).unwrap();
         for _ in 0..100 {
-            if process_state(&sleeping) == ProcessState::Finished { break; }
+            if process_state(&sleeping) == ProcessState::Finished {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(process_state(&sleeping), ProcessState::Finished);
 
         let mut timed_manifest = Manifest::minimal("runtime-test");
         timed_manifest.resources.timeout_seconds = Some(1);
-        timed_manifest.write_to(&workspace.join("cathedral.toml")).unwrap();
-        let timed = launch(workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        timed_manifest
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
+        let timed = launch(
+            workspace,
+            &run_root,
+            &["/usr/bin/sleep".to_owned(), "30".to_owned()],
+        )
+        .unwrap();
         for _ in 0..300 {
-            if exit_status(&timed).is_some() { break; }
+            if exit_status(&timed).is_some() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert!(timed_out(&timed));
@@ -1036,12 +1369,20 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn sandbox_exposes_only_workspace_and_private_tmp() {
-        if !bubblewrap_works() { return; }
+        if !bubblewrap_works() {
+            return;
+        }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         fs::create_dir(&workspace).unwrap();
-        Manifest::minimal("filesystem-test").write_to(&workspace.join("cathedral.toml")).unwrap();
-        let run_root = temp.path().join("data").join("runs").join("filesystem-test");
+        Manifest::minimal("filesystem-test")
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
+        let run_root = temp
+            .path()
+            .join("data")
+            .join("runs")
+            .join("filesystem-test");
         fs::create_dir_all(run_root.parent().unwrap()).unwrap();
         let command = [
             "/usr/bin/sh".to_owned(),
@@ -1050,18 +1391,25 @@ mod tests {
         ];
         let record = launch(&workspace, &run_root, &command).unwrap();
         for _ in 0..200 {
-            if exit_status(&record).is_some() { break; }
+            if exit_status(&record).is_some() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(exit_status(&record), Some(0));
-        assert_eq!(fs::read_to_string(workspace.join("sandbox-proof")).unwrap(), "isolated");
+        assert_eq!(
+            fs::read_to_string(workspace.join("sandbox-proof")).unwrap(),
+            "isolated"
+        );
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     fn refuses_symlinked_working_directory() {
         use std::os::unix::fs::symlink;
-        if !bubblewrap_works() { return; }
+        if !bubblewrap_works() {
+            return;
+        }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         let outside = temp.path().join("outside");
@@ -1070,7 +1418,9 @@ mod tests {
         symlink(&outside, workspace.join("linked")).unwrap();
         let mut manifest = Manifest::minimal("symlink-test");
         manifest.environment.working_directory = Some("linked".to_owned());
-        manifest.write_to(&workspace.join("cathedral.toml")).unwrap();
+        manifest
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
         let run_root = temp.path().join("data").join("runs").join("symlink-test");
         fs::create_dir_all(run_root.parent().unwrap()).unwrap();
         assert!(launch(&workspace, &run_root, &["/usr/bin/true".to_owned()]).is_err());
@@ -1079,14 +1429,23 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn stop_terminates_a_running_workload() {
-        if !bubblewrap_works() { return; }
+        if !bubblewrap_works() {
+            return;
+        }
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         fs::create_dir(&workspace).unwrap();
-        Manifest::minimal("stop-test").write_to(&workspace.join("cathedral.toml")).unwrap();
+        Manifest::minimal("stop-test")
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
         let run_root = temp.path().join("data").join("runs").join("stop-test");
         fs::create_dir_all(run_root.parent().unwrap()).unwrap();
-        let record = launch(&workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        let record = launch(
+            &workspace,
+            &run_root,
+            &["/usr/bin/sleep".to_owned(), "30".to_owned()],
+        )
+        .unwrap();
         assert_eq!(process_state(&record), ProcessState::Running);
         stop(&run_root, &record.id).unwrap();
         assert_eq!(process_state(&record), ProcessState::Finished);
@@ -1096,7 +1455,11 @@ mod tests {
     #[test]
     fn enforces_manifest_timeout_and_records_timeout_exit() {
         if !bubblewrap_works()
-            || !Command::new("timeout").arg("--help").output().is_ok_and(|out| out.status.success()) {
+            || !Command::new("timeout")
+                .arg("--help")
+                .output()
+                .is_ok_and(|out| out.status.success())
+        {
             return;
         }
         let temp = tempfile::tempdir().unwrap();
@@ -1104,12 +1467,21 @@ mod tests {
         fs::create_dir(&workspace).unwrap();
         let mut manifest = Manifest::minimal("timeout-test");
         manifest.resources.timeout_seconds = Some(1);
-        manifest.write_to(&workspace.join("cathedral.toml")).unwrap();
+        manifest
+            .write_to(&workspace.join("cathedral.toml"))
+            .unwrap();
         let run_root = temp.path().join("data").join("runs").join("timeout-test");
         fs::create_dir_all(run_root.parent().unwrap()).unwrap();
-        let record = launch(&workspace, &run_root, &["/usr/bin/sleep".to_owned(), "30".to_owned()]).unwrap();
+        let record = launch(
+            &workspace,
+            &run_root,
+            &["/usr/bin/sleep".to_owned(), "30".to_owned()],
+        )
+        .unwrap();
         for _ in 0..300 {
-            if process_state(&record) == ProcessState::Finished { break; }
+            if process_state(&record) == ProcessState::Finished {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(process_state(&record), ProcessState::Finished);
@@ -1138,7 +1510,10 @@ mod tests {
     #[cfg(not(target_os = "linux"))]
     #[test]
     fn unsupported_platforms_fail_closed_instead_of_running_on_host() {
-        let command = vec!["echo".to_owned(), "unsafe fallback must not happen".to_owned()];
+        let command = vec![
+            "echo".to_owned(),
+            "unsafe fallback must not happen".to_owned(),
+        ];
         assert!(launch(Path::new("."), Path::new("./runs/test"), &command).is_err());
         assert!(stop(Path::new("."), "test-run").is_err());
         assert!(processes(&RunRecord {
@@ -1153,7 +1528,8 @@ mod tests {
             log_file: String::new(),
             exit_status_file: String::new(),
             cgroup_path: None,
-        }).is_err());
+        })
+        .is_err());
     }
     #[test]
     fn empty_command_is_rejected_before_platform_dispatch() {

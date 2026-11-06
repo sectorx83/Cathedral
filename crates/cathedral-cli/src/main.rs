@@ -55,7 +55,10 @@ enum Command {
         interval_seconds: u64,
     },
     /// Display captured workload output. Defaults to the latest run.
-    Logs { name: String, run_id: Option<String> },
+    Logs {
+        name: String,
+        run_id: Option<String>,
+    },
     /// List workload processes and their current resource measurements.
     Processes { name: String },
     /// Stop a workload and verify process cleanup by run identifier.
@@ -67,11 +70,18 @@ enum Command {
     /// Verify a checkpoint's SHA-256 integrity.
     Verify { name: String, snapshot: String },
     /// Compare two checkpoints.
-    Compare { name: String, first: String, second: String },
+    Compare {
+        name: String,
+        first: String,
+        second: String,
+    },
     /// Restore a verified checkpoint.
     Restore { name: String, snapshot: String },
     /// Export an experiment as a portable .cath package.
-    Export { name: String, output: Option<PathBuf> },
+    Export {
+        name: String,
+        output: Option<PathBuf>,
+    },
     /// Import an experiment from a .cath package.
     Import { package: PathBuf },
     /// Reproduce a package after strict host compatibility checks.
@@ -160,37 +170,74 @@ fn main() -> Result<()> {
             println!("Command: {}", record.command.join(" "));
             println!("Logs: {}", record.log_file);
         }
-        Command::Monitor { name, watch, interval_seconds } => {
+        Command::Monitor {
+            name,
+            watch,
+            interval_seconds,
+        } => {
             let item = inspect_experiment(&root, &name)?;
             let _workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             let records = runner::list_runs(&run_root)?;
-            let record = records.last().ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
+            let record = records
+                .last()
+                .ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
             loop {
                 runner::cleanup_finished(record)?;
-                println!("Run: {} | PID: {} | State: {}", record.id, record.pid, runner::process_state(record).label());
+                println!(
+                    "Run: {} | PID: {} | State: {}",
+                    record.id,
+                    record.pid,
+                    runner::process_state(record).label()
+                );
                 if let Some(metrics) = runner::metrics(record)? {
-                    println!("Process: {} | Parent PID: {}", metrics.state, metrics.parent_pid);
-                    println!("Memory: {} KiB RSS / {} KiB virtual", metrics.resident_memory_kb, metrics.virtual_memory_kb);
-                    println!("CPU: {} user ticks / {} system ticks", metrics.user_cpu_ticks, metrics.system_cpu_ticks);
-                    println!("Disk I/O: {} bytes read / {} bytes written", metrics.read_bytes, metrics.write_bytes);
-                    println!("Network namespace I/O (shared): {} bytes received / {} bytes sent", metrics.network_rx_bytes, metrics.network_tx_bytes);
-                    if let Some(value) = metrics.cgroup_memory_current_bytes { println!("Cgroup memory: {} bytes", value); }
-                    if let Some(value) = metrics.cgroup_cpu_usage_usec { println!("Cgroup CPU time: {} microseconds", value); }
-                    if let Some(value) = metrics.cgroup_process_count { println!("Cgroup processes: {}", value); }
+                    println!(
+                        "Process: {} | Parent PID: {}",
+                        metrics.state, metrics.parent_pid
+                    );
+                    println!(
+                        "Memory: {} KiB RSS / {} KiB virtual",
+                        metrics.resident_memory_kb, metrics.virtual_memory_kb
+                    );
+                    println!(
+                        "CPU: {} user ticks / {} system ticks",
+                        metrics.user_cpu_ticks, metrics.system_cpu_ticks
+                    );
+                    println!(
+                        "Disk I/O: {} bytes read / {} bytes written",
+                        metrics.read_bytes, metrics.write_bytes
+                    );
+                    println!(
+                        "Network namespace I/O (shared): {} bytes received / {} bytes sent",
+                        metrics.network_rx_bytes, metrics.network_tx_bytes
+                    );
+                    if let Some(value) = metrics.cgroup_memory_current_bytes {
+                        println!("Cgroup memory: {} bytes", value);
+                    }
+                    if let Some(value) = metrics.cgroup_cpu_usage_usec {
+                        println!("Cgroup CPU time: {} microseconds", value);
+                    }
+                    if let Some(value) = metrics.cgroup_process_count {
+                        println!("Cgroup processes: {}", value);
+                    }
                 } else {
                     println!("Process metrics: unavailable (workload exited)");
                 }
                 if runner::process_state(record) == runner::ProcessState::Finished {
                     if runner::timed_out(record) {
-                        println!("Timed out after {} seconds", record.timeout_seconds.unwrap_or_default());
+                        println!(
+                            "Timed out after {} seconds",
+                            record.timeout_seconds.unwrap_or_default()
+                        );
                     } else if let Some(code) = runner::exit_status(record) {
                         println!("Exit code: {code}");
                     } else if let Some(signal) = runner::termination_signal(record) {
                         println!("Terminated by {signal}");
                     }
                 }
-                if !watch || runner::process_state(record) != runner::ProcessState::Running { break; }
+                if !watch || runner::process_state(record) != runner::ProcessState::Running {
+                    break;
+                }
                 std::thread::sleep(std::time::Duration::from_secs(interval_seconds));
             }
         }
@@ -199,7 +246,8 @@ fn main() -> Result<()> {
             let _workspace = Workspace::new(&root)?.validate(Path::new(&item.workspace_path))?;
             let run_root = root.canonicalize()?.join("runs").join(&item.id);
             let records = runner::list_runs(&run_root)?;
-            let id = run_id.or_else(|| records.last().map(|record| record.id.clone()))
+            let id = run_id
+                .or_else(|| records.last().map(|record| record.id.clone()))
                 .ok_or_else(|| anyhow::anyhow!("experiment has no recorded runs"))?;
             print!("{}", runner::logs(&run_root, &id)?);
         }
@@ -211,16 +259,33 @@ fn main() -> Result<()> {
             if records.is_empty() {
                 println!("No workload runs recorded.");
             } else {
-                println!("{:<36} {:<10} {:<12} {:>12} {:>12}", "RUN ID", "PID", "STATE", "RSS (KiB)", "READ (B)");
+                println!(
+                    "{:<36} {:<10} {:<12} {:>12} {:>12}",
+                    "RUN ID", "PID", "STATE", "RSS (KiB)", "READ (B)"
+                );
                 for record in records {
                     runner::cleanup_finished(&record)?;
                     let state = runner::process_state(&record);
                     let processes = runner::processes(&record)?;
                     if processes.is_empty() {
-                        println!("{:<36} {:<10} {:<12} {:>12} {:>12}", record.id, record.pid, state.label(), 0, 0);
+                        println!(
+                            "{:<36} {:<10} {:<12} {:>12} {:>12}",
+                            record.id,
+                            record.pid,
+                            state.label(),
+                            0,
+                            0
+                        );
                     } else {
                         for process in processes {
-                            println!("{:<36} {:<10} {:<12} {:>12} {:>12}", record.id, process.pid, process.state, process.resident_memory_kb, process.read_bytes);
+                            println!(
+                                "{:<36} {:<10} {:<12} {:>12} {:>12}",
+                                record.id,
+                                process.pid,
+                                process.state,
+                                process.resident_memory_kb,
+                                process.read_bytes
+                            );
                         }
                     }
                 }
@@ -236,21 +301,42 @@ fn main() -> Result<()> {
         Command::Snapshot { name } => {
             let s = snapshot::create(&root, &name)?;
             println!("Created snapshot {}", s.id);
-            println!("Files: {} | Directories: {} | Bytes: {}", s.files, s.directories, s.bytes);
+            println!(
+                "Files: {} | Directories: {} | Bytes: {}",
+                s.files, s.directories, s.bytes
+            );
         }
         Command::Snapshots { name } => {
             let items = snapshot::list(&root, &name)?;
-            if items.is_empty() { println!("No snapshots recorded for '{name}'."); }
-            for s in items { println!("{}  {} files  {} bytes  created {}", s.id, s.files, s.bytes, s.created_at); }
+            if items.is_empty() {
+                println!("No snapshots recorded for '{name}'.");
+            }
+            for s in items {
+                println!(
+                    "{}  {} files  {} bytes  created {}",
+                    s.id, s.files, s.bytes, s.created_at
+                );
+            }
         }
         Command::Verify { name, snapshot: id } => {
             let s = snapshot::verify(&root, &name, &id)?;
-            println!("Snapshot integrity: OK ({} files, {} bytes)", s.files, s.bytes);
+            println!(
+                "Snapshot integrity: OK ({} files, {} bytes)",
+                s.files, s.bytes
+            );
         }
-        Command::Compare { name, first, second } => {
+        Command::Compare {
+            name,
+            first,
+            second,
+        } => {
             let changes = snapshot::compare(&root, &name, &first, &second)?;
-            if changes.is_empty() { println!("Snapshots are identical."); }
-            for d in &changes { println!("{:<8} {}", d.change, d.path); }
+            if changes.is_empty() {
+                println!("Snapshots are identical.");
+            }
+            for d in &changes {
+                println!("{:<8} {}", d.change, d.path);
+            }
             println!("{} difference(s)", changes.len());
         }
         Command::Restore { name, snapshot: id } => {
@@ -261,12 +347,22 @@ fn main() -> Result<()> {
             let path = output.unwrap_or_else(|| PathBuf::from(format!("{name}.cath")));
             let r = snapshot::export(&root, &name, &path)?;
             println!("Exported '{}' to {}", r.name, path.display());
-            println!("Declared dependencies: {} (recorded, not installed)", r.dependencies);
+            println!(
+                "Declared dependencies: {} (recorded, not installed)",
+                r.dependencies
+            );
         }
         Command::Import { package } => {
             let r = snapshot::import(&root, &package, false)?;
             println!("Imported '{}' (ID: {})", r.name, r.id);
-            println!("Host match: {}", if r.compatible { "yes" } else { "no; inspect requirements before running" });
+            println!(
+                "Host match: {}",
+                if r.compatible {
+                    "yes"
+                } else {
+                    "no; inspect requirements before running"
+                }
+            );
             println!("Declared dependencies: {} (not installed)", r.dependencies);
         }
         Command::Reproduce { package } => {
@@ -348,7 +444,10 @@ fn main() -> Result<()> {
             let runtime = cathedral_core::runtime::RuntimeProbe::inspect();
             println!("Runtime host prerequisites:");
             println!("  bubblewrap: {}", runtime.bubblewrap.label());
-            println!("  Bubblewrap namespaces: {}", runtime.bubblewrap_namespaces.label());
+            println!(
+                "  Bubblewrap namespaces: {}",
+                runtime.bubblewrap_namespaces.label()
+            );
             println!("  unshare utility: {}", runtime.unshare_binary.label());
             println!(
                 "  user/PID/mount namespaces: {}",
@@ -365,16 +464,29 @@ fn main() -> Result<()> {
                 "  cgroup memory controller: {}",
                 runtime.memory_controller.label()
             );
-            let namespace_ready = runtime.bubblewrap_namespaces == cathedral_core::runtime::ProbeStatus::Available;
-            println!("Linux isolation prerequisites: {}", if namespace_ready { "available" } else { "incomplete" });
-            let cgroup_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT").map(PathBuf::from);
-            let cgroup_root_status = cgroup_root.as_ref().map(|path| {
-                if path.join("cgroup.controllers").is_file() && path.join("cgroup.procs").is_file() {
-                    "configured (delegation is verified at run time)"
+            let namespace_ready =
+                runtime.bubblewrap_namespaces == cathedral_core::runtime::ProbeStatus::Available;
+            println!(
+                "Linux isolation prerequisites: {}",
+                if namespace_ready {
+                    "available"
                 } else {
-                    "invalid or not a cgroup v2 directory"
+                    "incomplete"
                 }
-            }).unwrap_or("not configured");
+            );
+            let cgroup_root = std::env::var_os("CATHEDRAL_CGROUP_ROOT").map(PathBuf::from);
+            let cgroup_root_status = cgroup_root
+                .as_ref()
+                .map(|path| {
+                    if path.join("cgroup.controllers").is_file()
+                        && path.join("cgroup.procs").is_file()
+                    {
+                        "configured (delegation is verified at run time)"
+                    } else {
+                        "invalid or not a cgroup v2 directory"
+                    }
+                })
+                .unwrap_or("not configured");
             println!("Delegated cgroup root: {cgroup_root_status}");
             println!("Windows/macOS workload isolation: unsupported in this release");
 

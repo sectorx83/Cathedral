@@ -7,7 +7,11 @@ use tokio::net::TcpListener;
 use uuid::Uuid;
 
 #[derive(Debug, Parser)]
-#[command(name = "cathedral-studio-api", version, about = "Local authenticated API for Cathedral Studio")]
+#[command(
+    name = "cathedral-studio-api",
+    version,
+    about = "Local authenticated API for Cathedral Studio"
+)]
 struct Args {
     /// Override Cathedral's local data directory.
     #[arg(long, env = "CATHEDRAL_HOME")]
@@ -23,7 +27,9 @@ fn data_dir(override_path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     }
     let base = dirs::data_local_dir()
         .or_else(dirs::data_dir)
-        .ok_or_else(|| anyhow::anyhow!("could not determine a platform data directory; pass --home"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("could not determine a platform data directory; pass --home")
+        })?;
     Ok(base.join("cathedral"))
 }
 

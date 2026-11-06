@@ -154,16 +154,32 @@ impl Manifest {
             }
         }
         if self.resources.memory_max_bytes == Some(0) {
-            return Err(CathedralError::Manifest("resources.memory_max_bytes must be greater than zero".to_owned()));
+            return Err(CathedralError::Manifest(
+                "resources.memory_max_bytes must be greater than zero".to_owned(),
+            ));
         }
-        if self.resources.cpu_quota_percent.is_some_and(|value| value == 0 || value > 1000) {
-            return Err(CathedralError::Manifest("resources.cpu_quota_percent must be between 1 and 1000".to_owned()));
+        if self
+            .resources
+            .cpu_quota_percent
+            .is_some_and(|value| value == 0 || value > 1000)
+        {
+            return Err(CathedralError::Manifest(
+                "resources.cpu_quota_percent must be between 1 and 1000".to_owned(),
+            ));
         }
         if self.resources.pids_max == Some(0) {
-            return Err(CathedralError::Manifest("resources.pids_max must be greater than zero".to_owned()));
+            return Err(CathedralError::Manifest(
+                "resources.pids_max must be greater than zero".to_owned(),
+            ));
         }
-        if self.resources.timeout_seconds.is_some_and(|value| value == 0 || value > 604800) {
-            return Err(CathedralError::Manifest("resources.timeout_seconds must be between 1 and 604800".to_owned()));
+        if self
+            .resources
+            .timeout_seconds
+            .is_some_and(|value| value == 0 || value > 604800)
+        {
+            return Err(CathedralError::Manifest(
+                "resources.timeout_seconds must be between 1 and 604800".to_owned(),
+            ));
         }
         for (name, requirement) in &self.dependencies.packages {
             let valid_name = !name.is_empty()
@@ -281,7 +297,7 @@ name = "limited-lab"
 memory_max_bytes = 536870912
 cpu_quota_percent = 150
 pids_max = 64
-timeout_seconds = 3600"#
+timeout_seconds = 3600"#,
         )
         .unwrap();
         assert_eq!(manifest.resources.memory_max_bytes, Some(536870912));
