@@ -1,0 +1,20 @@
+[package]
+name = "cathedral-studio"
+version = "0.1.0"
+description = "Cathedral desktop laboratory"
+authors = ["Cathedral contributors"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+axum = "0.7"
+cathedral-core = { path = "../../crates/cathedral-core" }
+cathedral-studio-api = { path = "../../crates/cathedral-studio-api" }
+dirs = "5"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1.37", features = ["net", "rt-multi-thread"] }
+tauri = { version = "2", features = [] }
+uuid = { version = "1.8", features = ["v4"] }

@@ -8,6 +8,7 @@ type Health = { host_os:string; host_arch:string };
 type FileEntry = { name:string; path:string; kind:string; size:number; modified_at:number|null };
 type FilePreview = { path:string; content:string; bytes:number };
 type Difference = { path:string; change:string };
+declare global { interface Window { __TAURI__?: { core: { invoke<T>(command:string):Promise<T> } } } }
 const enc=(value:string)=>encodeURIComponent(value);
 const date=(value:number)=>new Date(value*1000).toLocaleString();
 const id=(value:string)=>value.slice(0,8);
@@ -19,6 +20,7 @@ export default function App(){
  const [runId,setRunId]=useState(""),[logs,setLogs]=useState(""),[logNotice,setLogNotice]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const [createOpen,setCreateOpen]=useState(false),[newName,setNewName]=useState(""),[description,setDescription]=useState(""),[executable,setExecutable]=useState(""),[args,setArgs]=useState("");
  const [filesPath,setFilesPath]=useState(""),[files,setFiles]=useState<FileEntry[]>([]),[preview,setPreview]=useState<FilePreview|null>(null),[fileError,setFileError]=useState(""),[comparison,setComparison]=useState<Difference[]>([]),[comparisonLabel,setComparisonLabel]=useState("");
+ useEffect(()=>{const bridge=window.__TAURI__?.core;if(!bridge)return;let active=true;void bridge.invoke<{address:string;token:string}>("studio_connection").then(async connection=>{if(!active)return;setAddress(connection.address);setToken(connection.token);const response=await fetch(connection.address+"/api/v1/health",{headers:{Authorization:"Bearer "+connection.token}});if(!response.ok)throw new Error("The bundled Cathedral service rejected its startup token.");const health=await response.json() as Health;if(active){setHost(health);setConnected(true);}}).catch(e=>{if(active)setError(e instanceof Error?e.message:"Could not start the bundled Cathedral service");});return()=>{active=false;};},[]);
  const experiment=useMemo(()=>experiments.find(x=>x.name===selected)??null,[experiments,selected]);
  const activeRun=useMemo(()=>runs.find(x=>x.id===runId)??runs[0]??null,[runs,runId]);
  const api=useCallback(async<T,>(endpoint:string,init:RequestInit={}):Promise<T>=>{

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/cathedral-core", "crates/cathedral-cli", "crates/cathedral-studio-api"]
+exclude = ["studio/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
