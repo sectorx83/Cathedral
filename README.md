@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed cross-platform CI. Phase 4 includes a Tauri v2 desktop shell, authenticated local API, experiment controls, live server-sent run telemetry, captured logs, a path-confined read-only filesystem browser, snapshot verification/comparison, a declarative permission-scoped extension registry, and bounded starter workloads. Phase 4 remains in progress: interactive PTY support, broader advanced lab experiments, and manually validated installer releases are outstanding. The run console supports bounded stdin delivery to running Linux processes, but not TTY-dependent applications. Windows and macOS workload isolation remain unsupported.
+> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation passed cross-platform CI. Phase 4 includes a Tauri v2 desktop shell, authenticated local API, experiment controls, live server-sent run telemetry, PTY-backed Linux run input/output and resize controls, captured logs, a path-confined read-only filesystem browser, snapshot verification/comparison, a declarative permission-scoped extension registry, and bounded CPU, memory, disk, filesystem, network-isolation, and child-process probes. Phase 4 remains in progress while real sandbox/PTY execution, broader advanced lab experiments, and installer upgrade verification are validated. Windows and macOS workload isolation remain unsupported.
 
 ## What Cathedral is
 
