@@ -26,9 +26,9 @@ fn main() {
         .setup(|app| {
             let base = dirs::data_local_dir()
                 .or_else(dirs::data_dir)
-                .ok_or("could not determine a platform data directory")?;
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "could not determine a platform data directory"))?;
             let data_dir: PathBuf = base.join("cathedral");
-            initialize(&data_dir).map_err(|error| error.to_string())?;
+            initialize(&data_dir)?;
             let root = data_dir.canonicalize()?;
             let token = Uuid::new_v4().to_string();
             let (listener, address) = tauri::async_runtime::block_on(async {

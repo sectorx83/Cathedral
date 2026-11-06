@@ -573,6 +573,93 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+
+    #[tokio::test]
+    async fn workspace_browser_lists_and_previews_files() {
+        let temp = tempdir().unwrap();
+        let experiment = cathedral_core::create_experiment(
+            temp.path(),
+            "browser-lab",
+            Manifest::minimal("browser-lab"),
+        )
+        .unwrap();
+        std::fs::write(Path::new(&experiment.workspace_path).join("notes.txt"), "hello Cathedral").unwrap();
+        let app = test_router(temp.path());
+        let listing = app.clone().oneshot(
+            Request::builder()
+                .uri("/api/v1/experiments/browser-lab/files")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(listing.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(listing.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8(body.to_vec()).unwrap().contains("notes.txt"));
+
+        let preview = app.oneshot(
+            Request::builder()
+                .uri("/api/v1/experiments/browser-lab/files/content?path=notes.txt")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8(body.to_vec()).unwrap().contains("hello Cathedral"));
+    }
+
+    #[tokio::test]
+    async fn workspace_browser_rejects_parent_traversal() {
+        let temp = tempdir().unwrap();
+        cathedral_core::create_experiment(
+            temp.path(),
+            "browser-safe",
+            Manifest::minimal("browser-safe"),
+        ).unwrap();
+        let response = test_router(temp.path()).oneshot(
+            Request::builder()
+                .uri("/api/v1/experiments/browser-safe/files?path=..%2F..")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn snapshot_verification_and_comparison_are_exposed() {
+        let temp = tempdir().unwrap();
+        let experiment = cathedral_core::create_experiment(
+            temp.path(),
+            "snapshot-api",
+            Manifest::minimal("snapshot-api"),
+        ).unwrap();
+        let workspace = Path::new(&experiment.workspace_path);
+        std::fs::write(workspace.join("value.txt"), "first").unwrap();
+        let first = snapshot::create(temp.path(), "snapshot-api").unwrap();
+        std::fs::write(workspace.join("value.txt"), "second").unwrap();
+        let second = snapshot::create(temp.path(), "snapshot-api").unwrap();
+        let app = test_router(temp.path());
+        let verified = app.clone().oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/experiments/snapshot-api/snapshots/{}/verify", first.id))
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(verified.status(), StatusCode::OK);
+        let compared = app.oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/experiments/snapshot-api/snapshots/compare?a={}&b={}", first.id, second.id))
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(compared.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(compared.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8(body.to_vec()).unwrap().contains("changed"));
+    }
+
     #[tokio::test]
     async fn api_creates_an_experiment() {
         let temp = tempdir().unwrap();
