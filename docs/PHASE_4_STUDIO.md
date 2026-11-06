@@ -63,6 +63,20 @@ Run creation passes an argument vector to the existing runtime. It does not invo
 
 From the `studio` directory, install Node dependencies and run `npm run tauri:dev` to launch the desktop application. Use `npm run tauri:build` to create platform-native bundles. CI compiles the Tauri application on Linux, Windows, and macOS; this compile check is not a substitute for installing and manually exercising each packaged release.
 
+## Extension registry and SDK
+
+`cathedral-plugin-sdk` defines versioned TOML/JSON manifests, semantic-version validation, a versioned Studio API contract, and an explicit permission vocabulary. Studio can register and remove declarative manifests and persist grants. A grant is metadata only in this release: there is no dynamic code loader, and no third-party code is executed.
+
+The registry API is `GET/POST /api/v1/plugins`, `PUT /api/v1/plugins/{id}/grants`, and `DELETE /api/v1/plugins/{id}`. Permissions can only be granted when declared by the manifest. See [Extension development](EXTENSIONS.md).
+
+## Safe starter experiments
+
+The run console includes bounded CPU, memory, and workspace-I/O starter commands. These are ordinary argv-based workload examples, not host-wide pressure tools. They still depend on the configured runtime and its actual isolation limits.
+
+## Releases
+
+Tag a version as `vX.Y.Z` to build a Linux `.deb`, Windows `.msi`, and macOS `.dmg`. These are unsigned CI artifacts; Windows/macOS users may see operating-system security warnings. Signing and notarization are not configured. The release workflow builds platform packages but does not replace manual install/upgrade testing.
+
 ## Next Phase 4 work
 
 1. Add an interactive PTY terminal with explicit input/output handling and cancellation.

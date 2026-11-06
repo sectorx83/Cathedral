@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/cathedral-core", "crates/cathedral-cli", "crates/cathedral-studio-api"]
+members = ["crates/cathedral-core", "crates/cathedral-cli", "crates/cathedral-studio-api", "crates/cathedral-plugin-sdk"]
 exclude = ["studio/src-tauri"]
 
 [workspace.package]

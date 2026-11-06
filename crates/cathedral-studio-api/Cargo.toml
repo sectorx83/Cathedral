@@ -13,6 +13,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 axum.workspace = true
 cathedral-core = { path = "../cathedral-core" }
+cathedral-plugin-sdk = { path = "../cathedral-plugin-sdk" }
 clap.workspace = true
 dirs.workspace = true
 serde.workspace = true

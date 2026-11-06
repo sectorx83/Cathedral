@@ -1,0 +1,71 @@
+name: Cathedral Studio Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package Studio (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+            bundles: deb
+          - platform: windows
+            os: windows-latest
+            bundles: msi
+          - platform: macos
+            os: macos-latest
+            bundles: dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked Studio dependencies
+        working-directory: studio
+        run: npm ci --no-audit --no-fund
+      - name: Build platform installer
+        working-directory: studio
+        run: npm run tauri:build -- --bundles ${{ matrix.bundles }}
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: cathedral-studio-${{ matrix.platform }}
+          path: studio/src-tauri/target/release/bundle/**/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish release assets
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download platform installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cathedral-studio-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/**/*
+          fail_on_unmatched_files: true

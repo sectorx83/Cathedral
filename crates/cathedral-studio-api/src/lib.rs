@@ -17,6 +17,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use cathedral_plugin_sdk::{PluginManifest, PluginPermission};
 use cathedral_core::{
     create_experiment, delete_experiment, inspect_experiment, list_experiments, manifest::Manifest,
     platform::PlatformInfo, registry::Experiment, runner, snapshot, workspace::Workspace,
@@ -73,6 +74,15 @@ impl IntoResponse for ApiError {
             .into_response()
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PluginInstallRequest { manifest: PluginManifest }
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PluginGrantRequest { permissions: Vec<PluginPermission> }
+#[derive(Debug, Serialize)]
+struct PluginView { manifest: PluginManifest, granted_permissions: Vec<PluginPermission> }
 
 #[derive(Debug, Serialize)]
 struct HealthView {
@@ -285,6 +295,9 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
 
     Router::new()
         .route("/api/v1/health", get(health))
+        .route("/api/v1/plugins", get(list_plugins).post(install_plugin))
+        .route("/api/v1/plugins/:id", axum::routing::delete(remove_plugin))
+        .route("/api/v1/plugins/:id/grants", axum::routing::put(update_plugin_grants))
         .route("/api/v1/experiments", get(list).post(create))
         .route("/api/v1/experiments/:name", get(inspect).delete(remove))
         .route(
@@ -400,6 +413,143 @@ async fn compare_snapshots(
 ) -> Result<Json<Vec<DifferenceView>>, ApiError> {
     let differences = snapshot::compare(&state.data_dir, &name, &query.a, &query.b)?;
     Ok(Json(differences.into_iter().map(|item| DifferenceView { path: item.path, change: item.change }).collect()))
+}
+
+
+fn plugin_root(data_dir: &Path) -> Result<PathBuf, ApiError> {
+    let root = data_dir.join("plugins");
+    match fs::symlink_metadata(&root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() =>
+            return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin registry path is not a real directory")),
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound =>
+            fs::create_dir(&root).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+        Err(error) => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())),
+    }
+    root.canonicalize().map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+fn plugin_directory(data_dir: &Path, id: &str) -> Result<(PathBuf, PathBuf), ApiError> {
+    if id.is_empty() || id.len() > 64 || !id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid plugin identifier"));
+    }
+    let root = plugin_root(data_dir)?;
+    let directory = root.join(id);
+    let metadata = fs::symlink_metadata(&directory)
+        .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "plugin not found"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin registry entry is not a real directory"));
+    }
+    let canonical = directory.canonicalize()
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if !canonical.starts_with(&root) {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin registry path escaped its root"));
+    }
+    Ok((root, canonical))
+}
+
+fn read_plugin(directory: &Path) -> Result<PluginView, ApiError> {
+    let manifest_path = directory.join("plugin.json");
+    let metadata = fs::symlink_metadata(&manifest_path)
+        .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "plugin manifest not found"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin manifest is not a regular file"));
+    }
+    let bytes = fs::read(&manifest_path)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let manifest: PluginManifest = serde_json::from_slice(&bytes)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, format!("invalid installed plugin manifest: {e}")))?;
+    manifest.validate()
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let grants_path = directory.join("grants.json");
+    let granted_permissions = match fs::symlink_metadata(&grants_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() =>
+            return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin grants are not a regular file")),
+        Ok(_) => serde_json::from_slice(&fs::read(grants_path)
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, format!("invalid plugin grants: {e}")))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())),
+    };
+    Ok(PluginView { manifest, granted_permissions })
+}
+
+async fn list_plugins(State(state): State<ApiState>) -> Result<Json<Vec<PluginView>>, ApiError> {
+    let root = plugin_root(&state.data_dir)?;
+    let mut plugins = Vec::new();
+    for entry in fs::read_dir(root).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        let entry = entry.map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() { continue; }
+        plugins.push(read_plugin(&entry.path())?);
+    }
+    plugins.sort_by(|a, b| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()));
+    Ok(Json(plugins))
+}
+
+async fn install_plugin(
+    State(state): State<ApiState>,
+    Json(request): Json<PluginInstallRequest>,
+) -> Result<(StatusCode, Json<PluginView>), ApiError> {
+    request.manifest.validate()
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let root = plugin_root(&state.data_dir)?;
+    let directory = root.join(&request.manifest.id);
+    fs::create_dir(&directory)
+        .map_err(|e| if e.kind() == std::io::ErrorKind::AlreadyExists {
+            ApiError::new(StatusCode::CONFLICT, "plugin is already installed")
+        } else { ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()) })?;
+    let result = (|| -> Result<(), ApiError> {
+        let manifest = serde_json::to_vec_pretty(&request.manifest)
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        fs::write(directory.join("plugin.json"), manifest)
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        fs::write(directory.join("grants.json"), b"[]")
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        let _ = fs::remove_dir_all(&directory);
+        return Err(error);
+    }
+    Ok((StatusCode::CREATED, Json(read_plugin(&directory)?)))
+}
+
+async fn update_plugin_grants(
+    State(state): State<ApiState>,
+    AxumPath(id): AxumPath<String>,
+    Json(request): Json<PluginGrantRequest>,
+) -> Result<Json<PluginView>, ApiError> {
+    let (_, directory) = plugin_directory(&state.data_dir, &id)?;
+    let mut plugin = read_plugin(&directory)?;
+    for permission in &request.permissions {
+        if !plugin.manifest.permissions.contains(permission) {
+            return Err(ApiError::new(StatusCode::BAD_REQUEST, "cannot grant a permission not declared by the plugin"));
+        }
+    }
+    let unique: std::collections::BTreeSet<_> = request.permissions.iter().collect();
+    if unique.len() != request.permissions.len() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "duplicate permissions are not allowed"));
+    }
+    let temporary = directory.join("grants.json.tmp");
+    fs::write(&temporary, serde_json::to_vec_pretty(&request.permissions)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    fs::rename(&temporary, directory.join("grants.json"))
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    plugin.granted_permissions = request.permissions;
+    Ok(Json(plugin))
+}
+
+async fn remove_plugin(
+    State(state): State<ApiState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<StatusCode, ApiError> {
+    let (_, directory) = plugin_directory(&state.data_dir, &id)?;
+    fs::remove_dir_all(directory)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn health(State(_state): State<ApiState>) -> Json<HealthView> {
@@ -658,6 +808,48 @@ mod tests {
         assert_eq!(compared.status(), StatusCode::OK);
         let body = axum::body::to_bytes(compared.into_body(), usize::MAX).await.unwrap();
         assert!(String::from_utf8(body.to_vec()).unwrap().contains("changed"));
+    }
+
+    #[tokio::test]
+    async fn plugin_registry_installs_and_revokes_declared_permissions() {
+        let temp = tempdir().unwrap();
+        let app = test_router(temp.path());
+        let manifest = PluginManifest {
+            schema_version: 1,
+            id: "sample-inspector".to_owned(),
+            name: "Sample Inspector".to_owned(),
+            version: "1.0.0".to_owned(),
+            api_version: 1,
+            description: "Reads experiment metadata".to_owned(),
+            permissions: vec![PluginPermission::ReadExperiments, PluginPermission::ReadRunLogs],
+        };
+        let response = app.clone().oneshot(
+            Request::builder().method(Method::POST).uri("/api/v1/plugins")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&serde_json::json!({"manifest": manifest})).unwrap())).unwrap()
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let grant = app.clone().oneshot(
+            Request::builder().method(Method::PUT).uri("/api/v1/plugins/sample-inspector/grants")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"permissions":["read_experiments"]}"#)).unwrap()
+        ).await.unwrap();
+        assert_eq!(grant.status(), StatusCode::OK);
+        let forbidden_grant = app.clone().oneshot(
+            Request::builder().method(Method::PUT).uri("/api/v1/plugins/sample-inspector/grants")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"permissions":["restore_snapshots"]}"#)).unwrap()
+        ).await.unwrap();
+        assert_eq!(forbidden_grant.status(), StatusCode::BAD_REQUEST);
+        let removed = app.oneshot(
+            Request::builder().method(Method::DELETE).uri("/api/v1/plugins/sample-inspector")
+                .header(AUTHORIZATION, "Bearer studio-test-token")
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(removed.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]
