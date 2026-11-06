@@ -449,6 +449,9 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
                     if libc::setsid() < 0 {
                         return Err(std::io::Error::last_os_error());
                     }
+                    if libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as _, 0) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
                     Ok(())
                 });
             }
