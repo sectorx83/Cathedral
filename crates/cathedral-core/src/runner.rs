@@ -405,7 +405,8 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
                 "/usr/local/bin:/usr/bin:/bin",
             ])
             .args(["--setenv", "HOME", "/workspace"])
-            .args(["--setenv", "TMPDIR", "/tmp"]);
+            .args(["--setenv", "TMPDIR", "/tmp"])
+            .args(["--setenv", "TERM", "xterm-256color"]);
         for (key, value) in &manifest.environment.variables {
             child.arg("--setenv").arg(key).arg(value);
         }
@@ -446,9 +447,6 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
             unsafe {
                 supervisor.pre_exec(|| {
                     if libc::setsid() < 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    if libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as _, 0) < 0 {
                         return Err(std::io::Error::last_os_error());
                     }
                     Ok(())
