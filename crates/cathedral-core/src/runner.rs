@@ -875,7 +875,7 @@ pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize>
     }
     #[cfg(target_os = "linux")]
     {
-        use std::os::unix::fs::FileTypeExt;
+        use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
         let directory = run_directory(run_root, run_id)?;
         let record = read_record(&directory.join("run.json"))?;
         if process_state(&record) != ProcessState::Running {
@@ -888,7 +888,10 @@ pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize>
         if metadata.file_type().is_symlink() || !metadata.file_type().is_fifo() {
             return Err(CathedralError::UnsafePath(path));
         }
-        let mut pipe = OpenOptions::new().write(true).open(path)?;
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(path)?;
         pipe.write_all(input)?;
         Ok(input.len())
     }
@@ -1536,6 +1539,40 @@ mod tests {
         cleanup_finished(&record).unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn writes_bounded_stdin_to_a_running_workload_pipe() {
+        let temporary = tempfile::tempdir().unwrap();
+        let run_root = temporary.path().join("runs").join("experiment");
+        fs::create_dir_all(&run_root).unwrap();
+        let id = "aabbccdd-1234";
+        let directory = run_root.join(id);
+        fs::create_dir(&directory).unwrap();
+        let pipe_path = directory.join("stdin.pipe");
+        let pipe_c_path = std::ffi::CString::new(pipe_path.as_os_str().as_encoded_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(pipe_c_path.as_ptr(), 0o600) }, 0);
+        let mut pipe = OpenOptions::new().read(true).write(true).open(&pipe_path).unwrap();
+        let record = RunRecord {
+            id: id.to_owned(),
+            pid: std::process::id(),
+            supervisor_pid: 0,
+            supervisor_start_ticks: 0,
+            process_start_ticks: 0,
+            started_at: now_seconds(),
+            command: vec!["test-reader".to_owned()],
+            timeout_seconds: None,
+            log_file: String::new(),
+            exit_status_file: String::new(),
+            cgroup_path: None,
+            stdin_file: Some(pipe_path.to_string_lossy().into_owned()),
+        };
+        fs::write(directory.join("run.json"), serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(write_stdin(&run_root, id, b"hello\n").unwrap(), 6);
+        let mut received = [0u8; 6];
+        pipe.read_exact(&mut received).unwrap();
+        assert_eq!(&received, b"hello\n");
+        assert!(write_stdin(&run_root, id, &vec![b'x'; 4097]).is_err());
+    }
     #[cfg(target_os = "linux")]
     #[test]
     fn refuses_to_stop_a_reused_process_identifier() {
