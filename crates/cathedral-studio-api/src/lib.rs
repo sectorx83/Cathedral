@@ -12,13 +12,13 @@ use std::{
 
 use axum::{
     body::Body,
-    response::sse::{Event, KeepAlive, Sse},
     extract::{Path as AxumPath, Query, State},
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE},
         Method, Request, StatusCode,
     },
     middleware::{self, Next},
+    response::sse::{Event, KeepAlive, Sse},
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
@@ -855,7 +855,9 @@ async fn stream_events(
         }
     };
     Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new().interval(Duration::from_secs(15)).text("keep-alive"),
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keep-alive"),
     ))
 }
 
