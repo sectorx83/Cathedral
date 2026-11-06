@@ -65,8 +65,12 @@ impl PluginManifest {
         }
         let id = self.id.as_bytes();
         let first_is_valid = id.first().is_some_and(u8::is_ascii_lowercase);
-        let last_is_valid = id.last().is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit());
-        let characters_are_valid = id.iter().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-');
+        let last_is_valid = id
+            .last()
+            .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit());
+        let characters_are_valid = id
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-');
         if !(2..=64).contains(&id.len())
             || !first_is_valid
             || !last_is_valid
@@ -103,8 +107,7 @@ impl PluginManifest {
 
     pub fn to_toml(&self) -> Result<String, PluginManifestError> {
         self.validate()?;
-        toml::to_string_pretty(self)
-            .map_err(|error| PluginManifestError::Parse(error.to_string()))
+        toml::to_string_pretty(self).map_err(|error| PluginManifestError::Parse(error.to_string()))
     }
 }
 
@@ -135,7 +138,10 @@ mod tests {
     fn rejects_duplicate_permissions() {
         let mut value = manifest();
         value.permissions.push(PluginPermission::ReadExperiments);
-        assert_eq!(value.validate(), Err(PluginManifestError::DuplicatePermission));
+        assert_eq!(
+            value.validate(),
+            Err(PluginManifestError::DuplicatePermission)
+        );
     }
 
     #[test]
@@ -145,6 +151,9 @@ mod tests {
         assert_eq!(value.validate(), Err(PluginManifestError::InvalidId));
         value.id = "valid-plugin".to_owned();
         value.api_version = 99;
-        assert_eq!(value.validate(), Err(PluginManifestError::UnsupportedApi(99)));
+        assert_eq!(
+            value.validate(),
+            Err(PluginManifestError::UnsupportedApi(99))
+        );
     }
 }

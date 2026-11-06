@@ -300,8 +300,10 @@ pub fn launch(workspace: &Path, run_root: &Path, command: &[String]) -> Result<R
         let stderr = log.try_clone()?;
         use std::os::unix::{ffi::OsStrExt, io::FromRawFd};
         let stdin_path = directory.join("stdin.pipe");
-        let stdin_c_path = std::ffi::CString::new(stdin_path.as_os_str().as_bytes())
-            .map_err(|_| CathedralError::Manifest("stdin pipe path contains a null byte".to_owned()))?;
+        let stdin_c_path =
+            std::ffi::CString::new(stdin_path.as_os_str().as_bytes()).map_err(|_| {
+                CathedralError::Manifest("stdin pipe path contains a null byte".to_owned())
+            })?;
         if unsafe { libc::mkfifo(stdin_c_path.as_ptr(), 0o600) } != 0 {
             return Err(std::io::Error::last_os_error().into());
         }
@@ -866,12 +868,20 @@ pub fn logs(run_root: &Path, run_id: &str) -> Result<String> {
 /// Write a bounded chunk to a running isolated workload's standard input.
 /// This is a pipe-backed channel, not a pseudo-terminal.
 pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize> {
-    if input.is_empty() { return Ok(0); }
-    if input.len() > 4096 { return Err(CathedralError::Manifest("stdin chunks are limited to 4096 bytes".to_owned())); }
+    if input.is_empty() {
+        return Ok(0);
+    }
+    if input.len() > 4096 {
+        return Err(CathedralError::Manifest(
+            "stdin chunks are limited to 4096 bytes".to_owned(),
+        ));
+    }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (run_root, run_id, input);
-        Err(CathedralError::Manifest("interactive workload input is currently supported on Linux only".to_owned()))
+        Err(CathedralError::Manifest(
+            "interactive workload input is currently supported on Linux only".to_owned(),
+        ))
     }
     #[cfg(target_os = "linux")]
     {
@@ -879,11 +889,17 @@ pub fn write_stdin(run_root: &Path, run_id: &str, input: &[u8]) -> Result<usize>
         let directory = run_directory(run_root, run_id)?;
         let record = read_record(&directory.join("run.json"))?;
         if process_state(&record) != ProcessState::Running {
-            return Err(CathedralError::Manifest("workload is not running".to_owned()));
+            return Err(CathedralError::Manifest(
+                "workload is not running".to_owned(),
+            ));
         }
-        let stored = record.stdin_file.ok_or_else(|| CathedralError::Manifest("this run does not expose an input channel".to_owned()))?;
+        let stored = record.stdin_file.ok_or_else(|| {
+            CathedralError::Manifest("this run does not expose an input channel".to_owned())
+        })?;
         let path = PathBuf::from(stored);
-        if path.parent() != Some(directory.as_path()) { return Err(CathedralError::UnsafePath(path)); }
+        if path.parent() != Some(directory.as_path()) {
+            return Err(CathedralError::UnsafePath(path));
+        }
         let metadata = fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() || !metadata.file_type().is_fifo() {
             return Err(CathedralError::UnsafePath(path));
@@ -1551,7 +1567,11 @@ mod tests {
         let pipe_path = directory.join("stdin.pipe");
         let pipe_c_path = std::ffi::CString::new(pipe_path.as_os_str().as_encoded_bytes()).unwrap();
         assert_eq!(unsafe { libc::mkfifo(pipe_c_path.as_ptr(), 0o600) }, 0);
-        let mut pipe = OpenOptions::new().read(true).write(true).open(&pipe_path).unwrap();
+        let mut pipe = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&pipe_path)
+            .unwrap();
         let record = RunRecord {
             id: id.to_owned(),
             pid: std::process::id(),
@@ -1566,7 +1586,11 @@ mod tests {
             cgroup_path: None,
             stdin_file: Some(pipe_path.to_string_lossy().into_owned()),
         };
-        fs::write(directory.join("run.json"), serde_json::to_vec(&record).unwrap()).unwrap();
+        fs::write(
+            directory.join("run.json"),
+            serde_json::to_vec(&record).unwrap(),
+        )
+        .unwrap();
         assert_eq!(write_stdin(&run_root, id, b"hello\n").unwrap(), 6);
         let mut received = [0u8; 6];
         pipe.read_exact(&mut received).unwrap();

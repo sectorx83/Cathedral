@@ -3,7 +3,11 @@
 //! The service binds to loopback only, requires a per-process bearer token,
 //! and exposes the same experiment registry, runtime, and snapshot engine as the CLI.
 
-use std::{fs, path::{Component, Path, PathBuf}, time::UNIX_EPOCH};
+use std::{
+    fs,
+    path::{Component, Path, PathBuf},
+    time::UNIX_EPOCH,
+};
 
 use axum::{
     body::Body,
@@ -17,12 +21,12 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use cathedral_plugin_sdk::{PluginManifest, PluginPermission};
 use cathedral_core::{
     create_experiment, delete_experiment, inspect_experiment, list_experiments, manifest::Manifest,
     platform::PlatformInfo, registry::Experiment, runner, snapshot, workspace::Workspace,
     CathedralError,
 };
+use cathedral_plugin_sdk::{PluginManifest, PluginPermission};
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -77,12 +81,19 @@ impl IntoResponse for ApiError {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PluginInstallRequest { manifest: PluginManifest }
+struct PluginInstallRequest {
+    manifest: PluginManifest,
+}
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PluginGrantRequest { permissions: Vec<PluginPermission> }
+struct PluginGrantRequest {
+    permissions: Vec<PluginPermission>,
+}
 #[derive(Debug, Serialize)]
-struct PluginView { manifest: PluginManifest, granted_permissions: Vec<PluginPermission> }
+struct PluginView {
+    manifest: PluginManifest,
+    granted_permissions: Vec<PluginPermission>,
+}
 
 #[derive(Debug, Serialize)]
 struct HealthView {
@@ -130,9 +141,13 @@ struct RunRequest {
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct StdinRequest { data: String }
+struct StdinRequest {
+    data: String,
+}
 #[derive(Debug, Serialize)]
-struct StdinView { bytes_written: usize }
+struct StdinView {
+    bytes_written: usize,
+}
 
 #[derive(Debug, Serialize)]
 struct SnapshotView {
@@ -235,15 +250,34 @@ struct LogsView {
 }
 
 #[derive(Debug, Deserialize)]
-struct PathQuery { #[serde(default)] path: String }
+struct PathQuery {
+    #[serde(default)]
+    path: String,
+}
 #[derive(Debug, Deserialize)]
-struct CompareQuery { a: String, b: String }
+struct CompareQuery {
+    a: String,
+    b: String,
+}
 #[derive(Debug, Serialize)]
-struct FileEntryView { name: String, path: String, kind: &'static str, size: u64, modified_at: Option<u64> }
+struct FileEntryView {
+    name: String,
+    path: String,
+    kind: &'static str,
+    size: u64,
+    modified_at: Option<u64>,
+}
 #[derive(Debug, Serialize)]
-struct FileContentView { path: String, content: String, bytes: usize }
+struct FileContentView {
+    path: String,
+    content: String,
+    bytes: usize,
+}
 #[derive(Debug, Serialize)]
-struct DifferenceView { path: String, change: String }
+struct DifferenceView {
+    path: String,
+    change: String,
+}
 #[derive(Debug, Serialize)]
 struct StopView {
     run_id: String,
@@ -295,14 +329,23 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
             "http://localhost:5173".parse().expect("static origin"),
             "http://127.0.0.1:5173".parse().expect("static origin"),
         ]))
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([AUTHORIZATION, CONTENT_TYPE]);
 
     Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/plugins", get(list_plugins).post(install_plugin))
         .route("/api/v1/plugins/:id", axum::routing::delete(remove_plugin))
-        .route("/api/v1/plugins/:id/grants", axum::routing::put(update_plugin_grants))
+        .route(
+            "/api/v1/plugins/:id/grants",
+            axum::routing::put(update_plugin_grants),
+        )
         .route("/api/v1/experiments", get(list).post(create))
         .route("/api/v1/experiments/:name", get(inspect).delete(remove))
         .route(
@@ -315,14 +358,23 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
         )
         .route("/api/v1/experiments/:name/files", get(list_files))
         .route("/api/v1/experiments/:name/files/content", get(read_file))
-        .route("/api/v1/experiments/:name/snapshots/:snapshot_id/verify", get(verify_snapshot))
-        .route("/api/v1/experiments/:name/snapshots/compare", get(compare_snapshots))
+        .route(
+            "/api/v1/experiments/:name/snapshots/:snapshot_id/verify",
+            get(verify_snapshot),
+        )
+        .route(
+            "/api/v1/experiments/:name/snapshots/compare",
+            get(compare_snapshots),
+        )
         .route(
             "/api/v1/experiments/:name/runs",
             get(list_runs).post(start_run),
         )
         .route("/api/v1/experiments/:name/runs/:run_id/logs", get(get_logs))
-        .route("/api/v1/experiments/:name/runs/:run_id/input", axum::routing::post(send_stdin))
+        .route(
+            "/api/v1/experiments/:name/runs/:run_id/input",
+            axum::routing::post(send_stdin),
+        )
         .route(
             "/api/v1/experiments/:name/runs/:run_id/stop",
             axum::routing::post(stop_run),
@@ -332,28 +384,45 @@ pub fn router(data_dir: PathBuf, token: String) -> Router {
         .layer(cors)
 }
 
-
 fn safe_workspace_path(root: &Path, relative: &str) -> Result<PathBuf, ApiError> {
     if relative.contains('\0') || relative.contains('\\') {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid workspace path"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid workspace path",
+        ));
     }
     let relative_path = Path::new(relative);
     if relative_path.is_absolute()
-        || (!relative.is_empty() && relative_path.components().any(|part| !matches!(part, Component::Normal(_))))
+        || (!relative.is_empty()
+            && relative_path
+                .components()
+                .any(|part| !matches!(part, Component::Normal(_))))
     {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "workspace path must be relative"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "workspace path must be relative",
+        ));
     }
-    let canonical_root = root.canonicalize().map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     let mut candidate = canonical_root.clone();
     for part in relative_path.components() {
         candidate.push(part);
-        let metadata = fs::symlink_metadata(&candidate).map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+        let metadata = fs::symlink_metadata(&candidate)
+            .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
         if metadata.file_type().is_symlink() {
-            return Err(ApiError::new(StatusCode::FORBIDDEN, "symbolic links are not exposed by the workspace browser"));
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "symbolic links are not exposed by the workspace browser",
+            ));
         }
     }
     if !candidate.starts_with(&canonical_root) {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "workspace path escaped its root"));
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "workspace path escaped its root",
+        ));
     }
     Ok(candidate)
 }
@@ -366,19 +435,51 @@ async fn list_files(
     let (_, workspace) = experiment_workspace(&state.data_dir, &name)?;
     let directory = safe_workspace_path(&workspace, &query.path)?;
     if !directory.is_dir() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "requested path is not a directory"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "requested path is not a directory",
+        ));
     }
     let mut entries = Vec::new();
-    for entry in fs::read_dir(&directory).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        let entry = entry.map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let metadata = fs::symlink_metadata(entry.path()).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    for entry in fs::read_dir(&directory)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        let entry =
+            entry.map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        let path = if query.path.is_empty() { name.clone() } else { format!("{}/{}", query.path.trim_end_matches('/'), name) };
-        let kind = if metadata.file_type().is_symlink() { "symlink" } else if metadata.is_dir() { "directory" } else if metadata.is_file() { "file" } else { "special" };
-        let modified_at = metadata.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok()).map(|duration| duration.as_secs());
-        entries.push(FileEntryView { name, path, kind, size: metadata.len(), modified_at });
+        let path = if query.path.is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{}", query.path.trim_end_matches('/'), name)
+        };
+        let kind = if metadata.file_type().is_symlink() {
+            "symlink"
+        } else if metadata.is_dir() {
+            "directory"
+        } else if metadata.is_file() {
+            "file"
+        } else {
+            "special"
+        };
+        let modified_at = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs());
+        entries.push(FileEntryView {
+            name,
+            path,
+            kind,
+            size: metadata.len(),
+            modified_at,
+        });
     }
-    entries.sort_by(|a, b| (a.kind != "directory", a.name.to_lowercase()).cmp(&(b.kind != "directory", b.name.to_lowercase())));
+    entries.sort_by(|a, b| {
+        (a.kind != "directory", a.name.to_lowercase())
+            .cmp(&(b.kind != "directory", b.name.to_lowercase()))
+    });
     Ok(Json(entries))
 }
 
@@ -389,27 +490,49 @@ async fn read_file(
 ) -> Result<Json<FileContentView>, ApiError> {
     let (_, workspace) = experiment_workspace(&state.data_dir, &name)?;
     if query.path.is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "a file path is required"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "a file path is required",
+        ));
     }
     let path = safe_workspace_path(&workspace, &query.path)?;
-    let metadata = fs::metadata(&path).map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let metadata =
+        fs::metadata(&path).map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     if !metadata.is_file() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "requested path is not a regular file"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "requested path is not a regular file",
+        ));
     }
     const MAX_PREVIEW_BYTES: u64 = 262_144;
     if metadata.len() > MAX_PREVIEW_BYTES {
-        return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "file preview is limited to 256 KiB"));
+        return Err(ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "file preview is limited to 256 KiB",
+        ));
     }
-    let bytes = fs::read(&path).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let content = String::from_utf8(bytes).map_err(|_| ApiError::new(StatusCode::UNSUPPORTED_MEDIA_TYPE, "binary files cannot be previewed"))?;
-    Ok(Json(FileContentView { path: query.path, bytes: content.len(), content }))
+    let bytes = fs::read(&path)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let content = String::from_utf8(bytes).map_err(|_| {
+        ApiError::new(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "binary files cannot be previewed",
+        )
+    })?;
+    Ok(Json(FileContentView {
+        path: query.path,
+        bytes: content.len(),
+        content,
+    }))
 }
 
 async fn verify_snapshot(
     State(state): State<ApiState>,
     AxumPath((name, snapshot_id)): AxumPath<(String, String)>,
 ) -> Result<Json<SnapshotView>, ApiError> {
-    Ok(Json(snapshot::verify(&state.data_dir, &name, &snapshot_id)?.into()))
+    Ok(Json(
+        snapshot::verify(&state.data_dir, &name, &snapshot_id)?.into(),
+    ))
 }
 
 async fn compare_snapshots(
@@ -418,38 +541,70 @@ async fn compare_snapshots(
     Query(query): Query<CompareQuery>,
 ) -> Result<Json<Vec<DifferenceView>>, ApiError> {
     let differences = snapshot::compare(&state.data_dir, &name, &query.a, &query.b)?;
-    Ok(Json(differences.into_iter().map(|item| DifferenceView { path: item.path, change: item.change }).collect()))
+    Ok(Json(
+        differences
+            .into_iter()
+            .map(|item| DifferenceView {
+                path: item.path,
+                change: item.change,
+            })
+            .collect(),
+    ))
 }
-
 
 fn plugin_root(data_dir: &Path) -> Result<PathBuf, ApiError> {
     let root = data_dir.join("plugins");
     match fs::symlink_metadata(&root) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() =>
-            return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin registry path is not a real directory")),
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "plugin registry path is not a real directory",
+            ))
+        }
         Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound =>
-            fs::create_dir(&root).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
-        Err(error) => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir(&root)
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+        Err(error) => {
+            return Err(ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error.to_string(),
+            ))
+        }
     }
-    root.canonicalize().map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    root.canonicalize()
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 fn plugin_directory(data_dir: &Path, id: &str) -> Result<(PathBuf, PathBuf), ApiError> {
-    if id.is_empty() || id.len() > 64 || !id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid plugin identifier"));
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid plugin identifier",
+        ));
     }
     let root = plugin_root(data_dir)?;
     let directory = root.join(id);
     let metadata = fs::symlink_metadata(&directory)
         .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "plugin not found"))?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin registry entry is not a real directory"));
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "plugin registry entry is not a real directory",
+        ));
     }
-    let canonical = directory.canonicalize()
+    let canonical = directory
+        .canonicalize()
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if !canonical.starts_with(&root) {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin registry path escaped its root"));
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "plugin registry path escaped its root",
+        ));
     }
     Ok((root, canonical))
 }
@@ -459,38 +614,75 @@ fn read_plugin(directory: &Path) -> Result<PluginView, ApiError> {
     let metadata = fs::symlink_metadata(&manifest_path)
         .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "plugin manifest not found"))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin manifest is not a regular file"));
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "plugin manifest is not a regular file",
+        ));
     }
     let bytes = fs::read(&manifest_path)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let manifest: PluginManifest = serde_json::from_slice(&bytes)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, format!("invalid installed plugin manifest: {e}")))?;
-    manifest.validate()
+    let manifest: PluginManifest = serde_json::from_slice(&bytes).map_err(|e| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("invalid installed plugin manifest: {e}"),
+        )
+    })?;
+    manifest
+        .validate()
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let grants_path = directory.join("grants.json");
     let granted_permissions = match fs::symlink_metadata(&grants_path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() =>
-            return Err(ApiError::new(StatusCode::FORBIDDEN, "plugin grants are not a regular file")),
-        Ok(_) => serde_json::from_slice(&fs::read(grants_path)
-            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
-            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, format!("invalid plugin grants: {e}")))?,
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "plugin grants are not a regular file",
+            ))
+        }
+        Ok(_) => serde_json::from_slice(
+            &fs::read(grants_path)
+                .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+        )
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                format!("invalid plugin grants: {e}"),
+            )
+        })?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(error) => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())),
+        Err(error) => {
+            return Err(ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error.to_string(),
+            ))
+        }
     };
-    Ok(PluginView { manifest, granted_permissions })
+    Ok(PluginView {
+        manifest,
+        granted_permissions,
+    })
 }
 
 async fn list_plugins(State(state): State<ApiState>) -> Result<Json<Vec<PluginView>>, ApiError> {
     let root = plugin_root(&state.data_dir)?;
     let mut plugins = Vec::new();
-    for entry in fs::read_dir(root).map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        let entry = entry.map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    for entry in fs::read_dir(root)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        let entry =
+            entry.map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let metadata = fs::symlink_metadata(entry.path())
             .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        if metadata.file_type().is_symlink() || !metadata.is_dir() { continue; }
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            continue;
+        }
         plugins.push(read_plugin(&entry.path())?);
     }
-    plugins.sort_by(|a, b| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()));
+    plugins.sort_by(|a, b| {
+        a.manifest
+            .name
+            .to_lowercase()
+            .cmp(&b.manifest.name.to_lowercase())
+    });
     Ok(Json(plugins))
 }
 
@@ -498,14 +690,19 @@ async fn install_plugin(
     State(state): State<ApiState>,
     Json(request): Json<PluginInstallRequest>,
 ) -> Result<(StatusCode, Json<PluginView>), ApiError> {
-    request.manifest.validate()
+    request
+        .manifest
+        .validate()
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let root = plugin_root(&state.data_dir)?;
     let directory = root.join(&request.manifest.id);
-    fs::create_dir(&directory)
-        .map_err(|e| if e.kind() == std::io::ErrorKind::AlreadyExists {
+    fs::create_dir(&directory).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
             ApiError::new(StatusCode::CONFLICT, "plugin is already installed")
-        } else { ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()) })?;
+        } else {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        }
+    })?;
     let result = (|| -> Result<(), ApiError> {
         let manifest = serde_json::to_vec_pretty(&request.manifest)
             .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -531,17 +728,26 @@ async fn update_plugin_grants(
     let mut plugin = read_plugin(&directory)?;
     for permission in &request.permissions {
         if !plugin.manifest.permissions.contains(permission) {
-            return Err(ApiError::new(StatusCode::BAD_REQUEST, "cannot grant a permission not declared by the plugin"));
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "cannot grant a permission not declared by the plugin",
+            ));
         }
     }
     let unique: std::collections::BTreeSet<_> = request.permissions.iter().collect();
     if unique.len() != request.permissions.len() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "duplicate permissions are not allowed"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "duplicate permissions are not allowed",
+        ));
     }
     let temporary = directory.join("grants.json.tmp");
-    fs::write(&temporary, serde_json::to_vec_pretty(&request.permissions)
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?)
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    fs::write(
+        &temporary,
+        serde_json::to_vec_pretty(&request.permissions)
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+    )
+    .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     fs::rename(&temporary, directory.join("grants.json"))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     plugin.granted_permissions = request.permissions;
@@ -655,10 +861,21 @@ async fn send_stdin(
     Json(request): Json<StdinRequest>,
 ) -> Result<Json<StdinView>, ApiError> {
     let bytes = request.data.as_bytes();
-    if bytes.len() > 4096 { return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "stdin chunks are limited to 4096 bytes")); }
-    if bytes.contains(&0) { return Err(ApiError::new(StatusCode::BAD_REQUEST, "stdin data cannot contain NUL bytes")); }
+    if bytes.len() > 4096 {
+        return Err(ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "stdin chunks are limited to 4096 bytes",
+        ));
+    }
+    if bytes.contains(&0) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "stdin data cannot contain NUL bytes",
+        ));
+    }
     let (experiment, _) = experiment_workspace(&state.data_dir, &name)?;
-    let bytes_written = runner::write_stdin(&run_root(&state.data_dir, &experiment), &run_id, bytes)?;
+    let bytes_written =
+        runner::write_stdin(&run_root(&state.data_dir, &experiment), &run_id, bytes)?;
     Ok(Json(StdinView { bytes_written }))
 }
 async fn get_logs(
@@ -741,7 +958,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-
     #[tokio::test]
     async fn workspace_browser_lists_and_previews_files() {
         let temp = tempdir().unwrap();
@@ -751,29 +967,48 @@ mod tests {
             Manifest::minimal("browser-lab"),
         )
         .unwrap();
-        std::fs::write(Path::new(&experiment.workspace_path).join("notes.txt"), "hello Cathedral").unwrap();
+        std::fs::write(
+            Path::new(&experiment.workspace_path).join("notes.txt"),
+            "hello Cathedral",
+        )
+        .unwrap();
         let app = test_router(temp.path());
-        let listing = app.clone().oneshot(
-            Request::builder()
-                .uri("/api/v1/experiments/browser-lab/files")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty())
-                .unwrap(),
-        ).await.unwrap();
+        let listing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/experiments/browser-lab/files")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(listing.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(listing.into_body(), usize::MAX).await.unwrap();
-        assert!(String::from_utf8(body.to_vec()).unwrap().contains("notes.txt"));
+        let body = axum::body::to_bytes(listing.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("notes.txt"));
 
-        let preview = app.oneshot(
-            Request::builder()
-                .uri("/api/v1/experiments/browser-lab/files/content?path=notes.txt")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty())
-                .unwrap(),
-        ).await.unwrap();
+        let preview = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/experiments/browser-lab/files/content?path=notes.txt")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(preview.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(preview.into_body(), usize::MAX).await.unwrap();
-        assert!(String::from_utf8(body.to_vec()).unwrap().contains("hello Cathedral"));
+        let body = axum::body::to_bytes(preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("hello Cathedral"));
     }
 
     #[tokio::test]
@@ -783,14 +1018,18 @@ mod tests {
             temp.path(),
             "browser-safe",
             Manifest::minimal("browser-safe"),
-        ).unwrap();
-        let response = test_router(temp.path()).oneshot(
-            Request::builder()
-                .uri("/api/v1/experiments/browser-safe/files?path=..%2F..")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty())
-                .unwrap(),
-        ).await.unwrap();
+        )
+        .unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/experiments/browser-safe/files?path=..%2F..")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
@@ -801,31 +1040,49 @@ mod tests {
             temp.path(),
             "snapshot-api",
             Manifest::minimal("snapshot-api"),
-        ).unwrap();
+        )
+        .unwrap();
         let workspace = Path::new(&experiment.workspace_path);
         std::fs::write(workspace.join("value.txt"), "first").unwrap();
         let first = snapshot::create(temp.path(), "snapshot-api").unwrap();
         std::fs::write(workspace.join("value.txt"), "second").unwrap();
         let second = snapshot::create(temp.path(), "snapshot-api").unwrap();
         let app = test_router(temp.path());
-        let verified = app.clone().oneshot(
-            Request::builder()
-                .uri(format!("/api/v1/experiments/snapshot-api/snapshots/{}/verify", first.id))
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty())
-                .unwrap(),
-        ).await.unwrap();
+        let verified = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/experiments/snapshot-api/snapshots/{}/verify",
+                        first.id
+                    ))
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(verified.status(), StatusCode::OK);
-        let compared = app.oneshot(
-            Request::builder()
-                .uri(format!("/api/v1/experiments/snapshot-api/snapshots/compare?a={}&b={}", first.id, second.id))
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty())
-                .unwrap(),
-        ).await.unwrap();
+        let compared = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/experiments/snapshot-api/snapshots/compare?a={}&b={}",
+                        first.id, second.id
+                    ))
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(compared.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(compared.into_body(), usize::MAX).await.unwrap();
-        assert!(String::from_utf8(body.to_vec()).unwrap().contains("changed"));
+        let body = axum::body::to_bytes(compared.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("changed"));
     }
 
     #[tokio::test]
@@ -839,47 +1096,86 @@ mod tests {
             version: "1.0.0".to_owned(),
             api_version: 1,
             description: "Reads experiment metadata".to_owned(),
-            permissions: vec![PluginPermission::ReadExperiments, PluginPermission::ReadRunLogs],
+            permissions: vec![
+                PluginPermission::ReadExperiments,
+                PluginPermission::ReadRunLogs,
+            ],
         };
-        let response = app.clone().oneshot(
-            Request::builder().method(Method::POST).uri("/api/v1/plugins")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_vec(&serde_json::json!({"manifest": manifest})).unwrap())).unwrap()
-        ).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/plugins")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&serde_json::json!({"manifest": manifest})).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
-        let grant = app.clone().oneshot(
-            Request::builder().method(Method::PUT).uri("/api/v1/plugins/sample-inspector/grants")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"permissions":["read_experiments"]}"#)).unwrap()
-        ).await.unwrap();
+        let grant = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/api/v1/plugins/sample-inspector/grants")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"permissions":["read_experiments"]}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(grant.status(), StatusCode::OK);
-        let forbidden_grant = app.clone().oneshot(
-            Request::builder().method(Method::PUT).uri("/api/v1/plugins/sample-inspector/grants")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"permissions":["restore_snapshots"]}"#)).unwrap()
-        ).await.unwrap();
+        let forbidden_grant = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/api/v1/plugins/sample-inspector/grants")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"permissions":["restore_snapshots"]}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(forbidden_grant.status(), StatusCode::BAD_REQUEST);
-        let removed = app.oneshot(
-            Request::builder().method(Method::DELETE).uri("/api/v1/plugins/sample-inspector")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .body(Body::empty()).unwrap()
-        ).await.unwrap();
+        let removed = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/api/v1/plugins/sample-inspector")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(removed.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]
     async fn stdin_endpoint_rejects_oversized_input_before_run_lookup() {
         let temp = tempdir().unwrap();
-        let response = test_router(temp.path()).oneshot(
-            Request::builder().method(Method::POST)
-                .uri("/api/v1/experiments/no-such-experiment/runs/no-run/input")
-                .header(AUTHORIZATION, "Bearer studio-test-token")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::json!({"data": "x".repeat(4097)}).to_string())).unwrap()
-        ).await.unwrap();
+        let response = test_router(temp.path())
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/experiments/no-such-experiment/runs/no-run/input")
+                    .header(AUTHORIZATION, "Bearer studio-test-token")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"data": "x".repeat(4097)}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
     #[tokio::test]
