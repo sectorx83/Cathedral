@@ -53,7 +53,7 @@ Run creation passes an argument vector to the existing runtime. It does not invo
 
 ## Next Phase 4 work
 
-1. Build the Tauri desktop shell and React/TypeScript application.
+1. Wrap the existing React/TypeScript Studio UI in a Tauri desktop shell.
 2. Add an experiment dashboard, lifecycle controls, filesystem browser, snapshot timeline, and log viewer.
 3. Add streaming observability and graph history.
 4. Add permission-scoped extension interfaces and SDK.

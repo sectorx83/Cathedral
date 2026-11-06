@@ -10,7 +10,7 @@ Its goal is simple: make **"it works on my machine"** a problem that can be inve
 
 Cathedral is designed for developers, students, researchers, and engineering teams who need a controlled place to test software and understand its behavior.
 
-> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation is in place and its cross-platform CI verification remains pending. Phase 4 has started with a local, authenticated Studio API foundation; the Tauri desktop application and interactive UI are not implemented yet. Windows and macOS workload isolation remain unsupported.
+> **Project status:** Phases 1 and 2 are complete. Phase 3 implementation is in place and its cross-platform CI verification remains pending. Phase 4 has started with a local authenticated Studio API and a React/TypeScript development preview; the native Tauri desktop application is not implemented yet. Windows and macOS workload isolation remain unsupported.
 
 ## What Cathedral is
 
@@ -140,10 +140,6 @@ The project is organized into four phases:
 | 4 | Cathedral Studio & Ecosystem | Desktop studio, advanced lab tools, plugin SDK, and platform releases |
 
 See [ROADMAP.md](ROADMAP.md) for scope and completion criteria.
-
-## Studio API foundation
-
-Phase 4 has started with a local authenticated API that shares the existing experiment registry, Linux runtime, and snapshot engine. Start it with `cargo run -p cathedral-studio-api -- --port 0`. It prints a startup-ready JSON line containing its loopback address and a temporary bearer token. See [Phase 4 Studio](docs/PHASE_4_STUDIO.md) for endpoints and security boundaries. This is an API foundation, not a completed desktop app.
 
 ## Snapshot and reproduction CLI
 

@@ -48,9 +48,34 @@ jobs:
             crates/
             Cargo.lock
 
+  studio-ui:
+    name: Studio UI build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate npm lockfile
+        working-directory: studio
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install locked dependencies
+        working-directory: studio
+        run: npm ci --no-audit --no-fund
+      - name: Build Studio
+        working-directory: studio
+        run: npm run build
+      - name: Upload verified Studio lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: cathedral-studio-lockfile
+          path: studio/package-lock.json
+
   commit-verified-maintenance:
     name: Commit verified formatting and lockfile
-    needs: rust
+    needs: [rust, studio-ui]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -63,10 +88,16 @@ jobs:
         with:
           name: cathedral-verified-source
           path: verified
-      - name: Apply tested formatting and lockfile
+      - name: Download the verified Studio lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: cathedral-studio-lockfile
+          path: studio-verified
+      - name: Apply tested formatting and lockfiles
         run: |
           cp -R verified/crates/. crates/
           cp verified/Cargo.lock Cargo.lock
+          cp studio-verified/package-lock.json studio/package-lock.json
       - name: Record the verified source commit
         run: |
           mkdir -p docs
@@ -76,7 +107,7 @@ jobs:
           - Source commit: $GITHUB_SHA
           - Workflow run: [#${GITHUB_RUN_NUMBER}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
           - Platforms: Linux, Windows, macOS
-          - Checks: rustfmt, Clippy with warnings denied, and all workspace tests
+          - Checks: rustfmt, Clippy with warnings denied, all workspace tests, and Studio UI production build
           - Verified at: $(date -u +'%Y-%m-%d %H:%M UTC')
           EOF
       - name: Commit only after the full platform matrix passes
@@ -89,7 +120,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add crates Cargo.lock docs/CI_STATUS.md
+            git add crates Cargo.lock studio/package-lock.json docs/CI_STATUS.md
             git commit -m "chore: format sources and lock dependencies"
             git push origin HEAD:main
           fi

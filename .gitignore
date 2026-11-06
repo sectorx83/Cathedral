@@ -7,3 +7,6 @@
 Thumbs.db
 .vscode/
 .idea/
+
+studio/node_modules/
+studio/dist/
